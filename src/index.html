@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>音视频处理工具 by huanggh</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="app-header">
+        <h1 class="app-title">🎵 音视频处理工具 by huanggh</h1>
+    </div>
+
+    <div class="main-container">
+        <div class="container">
+            <!-- 左侧文件列表 -->
+            <div class="left-panel">
+                <div class="folder-selection">
+                    <button id="select-folder-btn" class="btn btn-primary">📂 选择文件夹</button>
+                    <div id="folder-path" class="folder-path"></div>
+                </div>
+                
+                <div class="file-tabs">
+                    <button class="file-tab active" data-type="mp3">🎵 MP3文件</button>
+                    <button class="file-tab" data-type="video">🎬 视频文件</button>
+                </div>
+
+                <div class="file-list-header">
+                    <div class="header-select">
+                        <input type="checkbox" id="selectAllCheckbox" title="全选/取消全选">
+                    </div>
+                    <div class="header-name">名称</div>
+                    <div class="header-info">信息</div>
+                    <div class="header-size">大小</div>
+                </div>
+
+                <div id="fileList" class="file-list">
+                    <div class="empty-state">
+                        <p>请选择文件夹扫描媒体文件</p>
+                    </div>
+                </div>
+
+                <div class="bottom-bar">
+                    <div class="file-count">
+                        <span id="file-count-text">未选择文件</span>
+                    </div>
+                    <div class="action-buttons">
+                        <button id="processBtn" class="btn btn-success" disabled>🚀 开始处理</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧设置面板 -->
+            <div class="right-panel">
+                <div class="processing-type-tabs">
+                    <button class="process-tab active" data-type="mp3">MP3压缩</button>
+                    <button class="process-tab" data-type="video">视频处理</button>
+                </div>
+
+                <!-- MP3处理设置 -->
+                <div id="mp3-settings" class="tab-content active">
+                    <h4>MP3压缩设置</h4>
+                    <div class="setting-group">
+                        <label for="mp3-bitrate">目标比特率：</label>
+                        <select id="mp3-bitrate">
+                            <option value="32">32 kbps</option>
+                            <option value="64" selected>64 kbps</option>
+                            <option value="96">96 kbps</option>
+                            <option value="128">128 kbps</option>
+                        </select>
+                    </div>
+                    <div class="setting-group">
+                        <label for="mp3-threshold">比特率阈值：</label>
+                        <input type="number" id="mp3-threshold" value="64" min="32" max="320">
+                        <span class="help-text">只处理高于此比特率的文件</span>
+                    </div>
+                    <div class="setting-group">
+                        <label>
+                            <input type="checkbox" id="mp3-keep-structure" checked>
+                            保持文件夹结构
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 视频处理设置 -->
+                <div id="video-settings" class="tab-content">
+                    <h4>视频处理设置</h4>
+                    <div class="setting-group">
+                        <label for="lesson-name">课程名称：</label>
+                        <input type="text" id="lesson-name" placeholder="例如：lesson2">
+                    </div>
+                    <div class="setting-group">
+                        <label for="video-resolution">输出分辨率：</label>
+                        <select id="video-resolution">
+                            <option value="720p">720p (1280x720)</option>
+                            <option value="1080p" selected>1080p (1920x1080)</option>
+                        </select>
+                    </div>
+                    <div class="setting-group">
+                        <label for="video-bitrate">视频比特率：</label>
+                        <select id="video-bitrate">
+                            <option value="1000">1000k</option>
+                            <option value="2000" selected>2000k</option>
+                            <option value="3000">3000k</option>
+                            <option value="5000">5000k</option>
+                        </select>
+                    </div>
+                    <div class="setting-group">
+                        <label for="segment-duration">HLS片段时长（秒）：</label>
+                        <input type="number" id="segment-duration" value="10" min="5" max="30">
+                    </div>
+                    <div class="setting-group">
+                        <label>
+                            <input type="checkbox" id="video-rename" checked>
+                            重命名为标准格式
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 输出设置 -->
+                <div class="output-settings">
+                    <h4>输出设置</h4>
+                    <div class="setting-group">
+                        <label for="output-folder">输出文件夹：</label>
+                        <input type="text" id="output-folder" value="output" readonly>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 进度和日志区域 -->
+        <div class="progress-section">
+            <div class="progress-header">
+                <h4>处理进度</h4>
+                <div class="ffmpeg-status" id="ffmpeg-status">
+                    <span class="status-indicator">⚠️</span>
+                    <span>检查FFmpeg状态中...</span>
+                </div>
+            </div>
+            <div class="progress-bar-container">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+                <div class="progress-text" id="progress-text">准备就绪</div>
+            </div>
+            <div class="log-container">
+                <div id="log-content" class="log-content">
+                    <p class="log-entry info">🎵 音视频处理工具已启动</p>
+                    <p class="log-entry info">💡 选择文件夹开始扫描媒体文件</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/media-processor.js"></script>
+    <script src="js/renderer.js"></script>
+</body>
+</html> 

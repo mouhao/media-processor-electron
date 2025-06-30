@@ -1,0 +1,80 @@
+{
+  "name": "media-processor",
+  "version": "1.0.0",
+  "description": "跨平台音视频处理工具 - MP3压缩和视频HLS转换",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "dist": "electron-builder --publish=never",
+    "dist-mac": "electron-builder --mac",
+    "dist-win": "electron-builder --win",
+    "pack": "electron-builder --dir",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "keywords": [
+    "electron",
+    "media-processing",
+    "mp3-compression",
+    "video-processing",
+    "hls-conversion",
+    "cross-platform",
+    "desktop-app"
+  ],
+  "author": {
+    "name": "Developer",
+    "email": "developer@example.com"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0",
+    "fluent-ffmpeg": "^2.1.2",
+    "music-metadata": "^7.14.0",
+    "mime-types": "^2.1.35"
+  },
+  "build": {
+    "appId": "com.mediaprocessor.app",
+    "productName": "音视频处理工具",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "src/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "icon": "src/assets/icons/media.ico",
+      "category": "public.app-category.utilities",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ]
+    },
+    "win": {
+      "icon": "src/assets/icons/media.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+} 
