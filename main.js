@@ -1,7 +1,11 @@
 const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
-const MediaProcessor = require('./src/js/media-processor');
+
+// 导入新的处理器模块
+const { checkFfmpeg, scanMediaFiles, getFileDetails } = require('./src/js/processors/common-processor.js');
+const { processMp3Files } = require('./src/js/processors/mp3-processor.js');
+const { processVideoFiles } = require('./src/js/processors/video-processor.js');
 
 // 保持窗口对象的全局引用
 let mainWindow;
@@ -70,6 +74,13 @@ app.on('activate', () => {
 
 // IPC 通信处理
 
+// 进度报告函数，传递给处理器
+const progressCallback = (progress) => {
+  if (mainWindow) {
+    mainWindow.webContents.send('processing-progress', progress);
+  }
+};
+
 // 选择文件夹对话框
 ipcMain.handle('select-folder', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
@@ -87,8 +98,7 @@ ipcMain.handle('select-folder', async () => {
 // 扫描文件夹中的媒体文件
 ipcMain.handle('scan-media-files', async (event, folderPath) => {
   try {
-    const processor = new MediaProcessor();
-    const files = await processor.scanMediaFiles(folderPath);
+    const files = await scanMediaFiles(folderPath);
     return { success: true, files };
   } catch (error) {
     console.error('扫描媒体文件时出错:', error);
@@ -97,16 +107,9 @@ ipcMain.handle('scan-media-files', async (event, folderPath) => {
 });
 
 // 处理MP3文件
-ipcMain.handle('process-mp3-files', async (event, { folderPath, outputPath, files, options, onProgress }) => {
+ipcMain.handle('process-mp3-files', async (event, { folderPath, outputPath, files, options }) => {
   try {
-    const processor = new MediaProcessor();
-    
-    // 设置进度回调
-    processor.setProgressCallback((progress) => {
-      mainWindow.webContents.send('processing-progress', progress);
-    });
-
-    const result = await processor.processMp3Files(folderPath, outputPath, files, options);
+    const result = await processMp3Files(progressCallback, folderPath, outputPath, files, options);
     return { success: true, result };
   } catch (error) {
     console.error('处理MP3文件时出错:', error);
@@ -117,14 +120,7 @@ ipcMain.handle('process-mp3-files', async (event, { folderPath, outputPath, file
 // 处理视频文件
 ipcMain.handle('process-video-files', async (event, { folderPath, outputPath, files, options }) => {
   try {
-    const processor = new MediaProcessor();
-    
-    // 设置进度回调
-    processor.setProgressCallback((progress) => {
-      mainWindow.webContents.send('processing-progress', progress);
-    });
-
-    const result = await processor.processVideoFiles(folderPath, outputPath, files, options);
+    const result = await processVideoFiles(progressCallback, folderPath, outputPath, files, options);
     return { success: true, result };
   } catch (error) {
     console.error('处理视频文件时出错:', error);
@@ -135,19 +131,17 @@ ipcMain.handle('process-video-files', async (event, { folderPath, outputPath, fi
 // 获取ffmpeg状态
 ipcMain.handle('check-ffmpeg', async () => {
   try {
-    const processor = new MediaProcessor();
-    const isAvailable = await processor.checkFfmpeg();
-    return { success: true, available: isAvailable };
+    const available = await checkFfmpeg();
+    return { success: true, available };
   } catch (error) {
-    return { success: false, available: false, error: error.message };
+    return { success: false, error: error.message };
   }
 });
 
 // 获取单个文件的详细信息
 ipcMain.handle('get-file-details', async (event, { filePath, fileType }) => {
   try {
-    const processor = new MediaProcessor();
-    const details = await processor.getFileDetails(filePath, fileType);
+    const details = await getFileDetails(filePath, fileType);
     return { success: true, details };
   } catch (error) {
     return { success: false, error: error.message };
@@ -156,8 +150,10 @@ ipcMain.handle('get-file-details', async (event, { filePath, fileType }) => {
 
 // 获取默认输出路径
 ipcMain.handle('get-default-output-path', async (event, sourcePath) => {
+  if (!sourcePath) return { success: false, error: 'Source path is not provided' };
+  const outputPath = path.join(sourcePath, 'output');
   try {
-    const outputPath = path.join(sourcePath, 'output');
+    await fs.mkdir(outputPath, { recursive: true });
     return { success: true, path: outputPath };
   } catch (error) {
     return { success: false, error: error.message };
