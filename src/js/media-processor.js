@@ -209,9 +209,9 @@ class MediaProcessor {
     }
 
     // 处理MP3文件
-    async processMp3Files(folderPath, files, options) {
+    async processMp3Files(folderPath, outputPath, files, options) {
         const { bitrate = 64, threshold = 64, keepStructure = true, forceProcess = false } = options;
-        const outputDir = path.join(folderPath, 'output');
+        const outputDir = outputPath;
         
         // 创建输出目录
         await fs.mkdir(outputDir, { recursive: true });
@@ -317,7 +317,7 @@ class MediaProcessor {
     }
 
     // 处理视频文件
-    async processVideoFiles(folderPath, files, options) {
+    async processVideoFiles(folderPath, outputPath, files, options) {
         const { 
             lessonName = 'lesson', 
             resolution = '1080p',
@@ -326,7 +326,7 @@ class MediaProcessor {
             rename = true 
         } = options;
         
-        const outputDir = path.join(folderPath, 'output');
+        const outputDir = outputPath;
         await fs.mkdir(outputDir, { recursive: true });
 
         const results = [];

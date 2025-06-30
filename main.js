@@ -97,7 +97,7 @@ ipcMain.handle('scan-media-files', async (event, folderPath) => {
 });
 
 // 处理MP3文件
-ipcMain.handle('process-mp3-files', async (event, { folderPath, files, options, onProgress }) => {
+ipcMain.handle('process-mp3-files', async (event, { folderPath, outputPath, files, options, onProgress }) => {
   try {
     const processor = new MediaProcessor();
     
@@ -106,7 +106,7 @@ ipcMain.handle('process-mp3-files', async (event, { folderPath, files, options, 
       mainWindow.webContents.send('processing-progress', progress);
     });
 
-    const result = await processor.processMp3Files(folderPath, files, options);
+    const result = await processor.processMp3Files(folderPath, outputPath, files, options);
     return { success: true, result };
   } catch (error) {
     console.error('处理MP3文件时出错:', error);
@@ -115,7 +115,7 @@ ipcMain.handle('process-mp3-files', async (event, { folderPath, files, options, 
 });
 
 // 处理视频文件
-ipcMain.handle('process-video-files', async (event, { folderPath, files, options }) => {
+ipcMain.handle('process-video-files', async (event, { folderPath, outputPath, files, options }) => {
   try {
     const processor = new MediaProcessor();
     
@@ -124,7 +124,7 @@ ipcMain.handle('process-video-files', async (event, { folderPath, files, options
       mainWindow.webContents.send('processing-progress', progress);
     });
 
-    const result = await processor.processVideoFiles(folderPath, files, options);
+    const result = await processor.processVideoFiles(folderPath, outputPath, files, options);
     return { success: true, result };
   } catch (error) {
     console.error('处理视频文件时出错:', error);
@@ -149,6 +149,16 @@ ipcMain.handle('get-file-details', async (event, { filePath, fileType }) => {
     const processor = new MediaProcessor();
     const details = await processor.getFileDetails(filePath, fileType);
     return { success: true, details };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// 获取默认输出路径
+ipcMain.handle('get-default-output-path', async (event, sourcePath) => {
+  try {
+    const outputPath = path.join(sourcePath, 'output');
+    return { success: true, path: outputPath };
   } catch (error) {
     return { success: false, error: error.message };
   }

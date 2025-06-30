@@ -11,13 +11,19 @@ class MediaProcessorApp {
         this.initializeElements();
         this.bindEvents();
         this.checkFFmpegStatus();
+        
+        // 初始化配置面板
+        this.updateConfigPanel(this.currentFileType);
     }
 
     initializeElements() {
         // 按钮和输入元素
         this.selectFolderBtn = document.getElementById('select-folder-btn');
         this.processBtn = document.getElementById('processBtn');
+        this.removeSelectedBtn = document.getElementById('removeSelectedBtn');
         this.selectAllCheckbox = document.getElementById('selectAllCheckbox');
+        this.selectOutputBtn = document.getElementById('select-output-btn');
+        this.outputFolder = document.getElementById('output-folder');
         
         // 显示元素
         this.folderPath = document.getElementById('folder-path');
@@ -28,18 +34,24 @@ class MediaProcessorApp {
         this.logContent = document.getElementById('log-content');
         this.ffmpegStatus = document.getElementById('ffmpeg-status');
         
-        // 标签页
+        // 标签页和配置
         this.fileTabs = document.querySelectorAll('.file-tab');
-        this.processTabs = document.querySelectorAll('.process-tab');
         this.tabContents = document.querySelectorAll('.tab-content');
+        this.configTitle = document.getElementById('config-title');
     }
 
     bindEvents() {
         // 文件夹选择
         this.selectFolderBtn.addEventListener('click', () => this.selectFolder());
         
+        // 输出文件夹选择
+        this.selectOutputBtn.addEventListener('click', () => this.selectOutputFolder());
+        
         // 处理按钮
         this.processBtn.addEventListener('click', () => this.startProcessing());
+        
+        // 移除选中按钮
+        this.removeSelectedBtn.addEventListener('click', () => this.removeSelectedFiles());
         
         // 全选复选框
         this.selectAllCheckbox.addEventListener('change', (e) => this.selectAllFiles(e.target.checked));
@@ -47,11 +59,6 @@ class MediaProcessorApp {
         // 文件类型标签页
         this.fileTabs.forEach(tab => {
             tab.addEventListener('click', (e) => this.switchFileTab(e.target.dataset.type));
-        });
-        
-        // 处理类型标签页
-        this.processTabs.forEach(tab => {
-            tab.addEventListener('click', (e) => this.switchProcessTab(e.target.dataset.type));
         });
         
         // 监听处理进度
@@ -87,10 +94,29 @@ class MediaProcessorApp {
                 this.folderPath.textContent = `当前文件夹: ${result.path}`;
                 this.addLog('info', `📂 选择文件夹: ${result.path}`);
                 
+                // 设置默认输出路径为源文件夹下的output文件夹
+                const defaultOutputPath = await ipcRenderer.invoke('get-default-output-path', result.path);
+                if (defaultOutputPath.success) {
+                    this.outputFolder.value = defaultOutputPath.path;
+                    this.addLog('info', `📁 默认输出路径: ${defaultOutputPath.path}`);
+                }
+                
                 await this.scanMediaFiles();
             }
         } catch (error) {
             this.addLog('error', `选择文件夹失败: ${error.message}`);
+        }
+    }
+
+    async selectOutputFolder() {
+        try {
+            const result = await ipcRenderer.invoke('select-folder');
+            if (result.success && result.path) {
+                this.outputFolder.value = result.path;
+                this.addLog('info', `📁 输出文件夹: ${result.path}`);
+            }
+        } catch (error) {
+            this.addLog('error', `选择输出文件夹失败: ${error.message}`);
         }
     }
 
@@ -121,27 +147,39 @@ class MediaProcessorApp {
             tab.classList.toggle('active', tab.dataset.type === type);
         });
         
-        this.updateFileList();
+        // 更新配置面板
+        this.updateConfigPanel(type);
+        
+        // 检查是否需要获取详细信息
+        const files = this.mediaFiles[type] || [];
+        const needsDetails = files.some(file => 
+            !file.info || file.info === '点击处理时获取详情'
+        );
+        
+        this.renderFileList(needsDetails);
     }
 
-    switchProcessTab(type) {
-        // 更新标签页状态
-        this.processTabs.forEach(tab => {
-            tab.classList.toggle('active', tab.dataset.type === type);
-        });
+    updateConfigPanel(type) {
+        // 更新配置标题
+        if (type === 'mp3') {
+            this.configTitle.textContent = 'MP3压缩配置';
+        } else if (type === 'video') {
+            this.configTitle.textContent = '视频处理配置';
+        }
         
-        // 更新内容面板
+        // 更新配置内容
         this.tabContents.forEach(content => {
             content.classList.toggle('active', content.id === `${type}-settings`);
         });
-        
-        // 如果切换到不同的处理类型，也切换文件列表
-        if (type !== this.currentFileType) {
-            this.switchFileTab(type);
-        }
     }
 
+
+
     updateFileList() {
+        this.renderFileList(true); // 首次渲染需要获取详细信息
+    }
+
+    renderFileList(loadDetails = false) {
         const files = this.mediaFiles[this.currentFileType] || [];
         this.selectedFiles = [];
         
@@ -157,17 +195,35 @@ class MediaProcessorApp {
 
         const fileItems = files.map((file, index) => {
             const fileName = file.name;
+            const filePath = file.path;
             const fileSize = this.formatFileSize(file.size);
             const fileInfo = file.info || '';
+            
+            // 获取相对路径显示
+            let displayPath = filePath;
+            if (this.currentFolder && filePath.startsWith(this.currentFolder)) {
+                const relativePath = filePath.substring(this.currentFolder.length);
+                displayPath = relativePath.startsWith('/') || relativePath.startsWith('\\') 
+                    ? relativePath.substring(1) 
+                    : relativePath;
+            }
+            
+            // 如果已经有信息，直接使用；否则显示加载状态
+            const infoDisplay = fileInfo && fileInfo !== '点击处理时获取详情' 
+                ? fileInfo 
+                : (loadDetails ? '<span class="loading-spinner"></span>正在获取信息...' : '点击处理时获取详情');
             
             return `
                 <div class="file-item ${this.currentFileType}" data-index="${index}">
                     <div class="file-select">
                         <input type="checkbox" data-index="${index}">
                     </div>
-                    <div class="file-name" title="${fileName}">${fileName}</div>
+                    <div class="file-name" title="${filePath}">
+                        <div class="file-name-text">${fileName}</div>
+                        <div class="file-path-text">${displayPath}</div>
+                    </div>
                     <div class="file-info" data-file-index="${index}">
-                        <span class="loading-spinner"></span>正在获取信息...
+                        ${infoDisplay}
                     </div>
                     <div class="file-size">${fileSize}</div>
                 </div>
@@ -196,8 +252,10 @@ class MediaProcessorApp {
         this.updateFileCount();
         this.updateSelectAllCheckbox();
         
-        // 延迟自动获取文件详细信息
-        this.loadFileDetails(files);
+        // 只在需要时获取文件详细信息
+        if (loadDetails) {
+            this.loadFileDetails(files);
+        }
     }
 
     async loadFileDetails(files) {
@@ -249,6 +307,30 @@ class MediaProcessorApp {
         this.updateFileCount();
     }
 
+    removeSelectedFiles() {
+        if (this.selectedFiles.length === 0) return;
+        
+        const removedCount = this.selectedFiles.length;
+        const fileType = this.currentFileType;
+        
+        // 从mediaFiles中移除选中的文件
+        this.selectedFiles.forEach(selectedFile => {
+            const index = this.mediaFiles[fileType].findIndex(file => file.path === selectedFile.path);
+            if (index > -1) {
+                this.mediaFiles[fileType].splice(index, 1);
+            }
+        });
+        
+        // 清空选中列表
+        this.selectedFiles = [];
+        
+        // 重新渲染文件列表（不重新获取文件信息）
+        this.renderFileList(false);
+        
+        // 记录日志
+        this.addLog('info', `🗑️ 已移除 ${removedCount} 个${fileType === 'mp3' ? 'MP3' : '视频'}文件`);
+    }
+
     updateSelectAllCheckbox() {
         const files = this.mediaFiles[this.currentFileType] || [];
         const checkedCount = this.selectedFiles.length;
@@ -272,17 +354,26 @@ class MediaProcessorApp {
         if (selectedCount === 0) {
             this.fileCountText.textContent = `共 ${totalCount} 个文件`;
             this.processBtn.disabled = true;
+            this.removeSelectedBtn.disabled = true;
         } else {
             this.fileCountText.textContent = `已选择 ${selectedCount} / ${totalCount} 个文件`;
             this.processBtn.disabled = false;
+            this.removeSelectedBtn.disabled = false;
         }
     }
 
     async startProcessing() {
         if (this.isProcessing || this.selectedFiles.length === 0) return;
+
+        // 检查是否设置了输出路径
+        if (!this.outputFolder.value) {
+            this.addLog('error', '❌ 请先设置输出文件夹');
+            return;
+        }
         
         this.isProcessing = true;
         this.processBtn.disabled = true;
+        this.removeSelectedBtn.disabled = true;
         this.processBtn.textContent = '⏳ 处理中...';
         
         try {
@@ -295,8 +386,8 @@ class MediaProcessorApp {
             this.addLog('error', `处理失败: ${error.message}`);
         } finally {
             this.isProcessing = false;
-            this.processBtn.disabled = false;
             this.processBtn.textContent = '🚀 开始处理';
+            this.updateFileCount(); // 恢复按钮状态
             this.updateProgress({ type: this.currentFileType, current: 0, total: 0, status: 'complete' });
         }
     }
@@ -317,6 +408,7 @@ class MediaProcessorApp {
 
         const result = await ipcRenderer.invoke('process-mp3-files', {
             folderPath: this.currentFolder,
+            outputPath: this.outputFolder.value,
             files: this.selectedFiles,
             options
         });
@@ -354,6 +446,7 @@ class MediaProcessorApp {
 
         const result = await ipcRenderer.invoke('process-video-files', {
             folderPath: this.currentFolder,
+            outputPath: this.outputFolder.value,
             files: this.selectedFiles,
             options
         });

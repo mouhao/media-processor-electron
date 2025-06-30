@@ -45,6 +45,7 @@
                         <span id="file-count-text">未选择文件</span>
                     </div>
                     <div class="action-buttons">
+                        <button id="removeSelectedBtn" class="btn btn-danger" disabled>🗑️ 移除选中</button>
                         <button id="processBtn" class="btn btn-success" disabled>🚀 开始处理</button>
                     </div>
                 </div>
@@ -52,9 +53,8 @@
 
             <!-- 右侧设置面板 -->
             <div class="right-panel">
-                <div class="processing-type-tabs">
-                    <button class="process-tab active" data-type="mp3">MP3压缩</button>
-                    <button class="process-tab" data-type="video">视频处理</button>
+                <div class="config-header">
+                    <h3 id="config-title">MP3压缩配置</h3>
                 </div>
 
                 <!-- MP3处理设置 -->
@@ -136,7 +136,10 @@
                     <h4>输出设置</h4>
                     <div class="setting-group">
                         <label for="output-folder">输出文件夹：</label>
-                        <input type="text" id="output-folder" value="output" readonly>
+                        <div class="folder-input-group">
+                            <input type="text" id="output-folder" value="" readonly>
+                            <button id="select-output-btn" class="btn btn-primary">选择</button>
+                        </div>
                     </div>
                 </div>
             </div>
