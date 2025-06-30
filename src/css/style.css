@@ -69,6 +69,7 @@ body, html {
     flex-direction: column;
     background-color: #fff;
     border-right: 1px solid #e0e0e0;
+    min-width: 0; /* 确保flex子项可以收缩 */
 }
 
 .folder-selection {
@@ -111,6 +112,13 @@ body, html {
     border-bottom: 2px solid #007bff;
 }
 
+.file-list-header,
+.file-item {
+    display: flex;
+    align-items: center;
+    min-width: var(--min-list-width); /* 保证内容可滚动 */
+}
+
 .file-list-header {
     display: flex;
     padding: 10px 15px;
@@ -121,43 +129,87 @@ body, html {
     user-select: none;
     align-items: center;
     background-color: #f8f9fa;
+    position: sticky;
+    top: 0;
+    z-index: 10;
 }
 
+.file-select,
 .header-select {
-    width: 40px;
+    flex-basis: 40px;
+    flex-shrink: 0;
+    text-align: center;
+}
+
+.file-name,
+.header-name {
+    flex-grow: 1;
+    flex-basis: var(--name-column-width);
+    overflow: hidden;
+    position: relative;
+    height: 100%;
     display: flex;
+    align-items: center;
+    padding: 0 10px;
+}
+
+.file-name {
+    flex-direction: column;
+    align-items: flex-start;
     justify-content: center;
+    gap: 2px;
+    padding: 8px 10px;
+    white-space: normal;
 }
 
-.header-name { 
-    flex: 1; 
-    padding-left: 10px;
+.file-name .file-name-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
 }
 
-.header-info { 
-    width: 120px; 
-    text-align: center; 
+.file-name .file-path-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
 }
 
-.header-size { 
-    width: 80px; 
-    text-align: right; 
+.file-info,
+.header-info {
+    flex-basis: 150px;
+    flex-shrink: 0;
+    padding: 0 10px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.file-size,
+.header-size {
+    flex-basis: 100px;
+    flex-shrink: 0;
+    padding: 0 10px;
+    text-align: right;
 }
 
 .file-list {
     flex: 1;
     overflow-y: auto;
+    overflow-x: auto;
+    min-width: 0;
+    position: relative;
 }
 
 .file-item {
-    display: flex;
-    align-items: center;
-    padding: 12px 15px;
+    padding: 5px 0;
     border-bottom: 1px solid #f0f0f0;
     cursor: pointer;
     transition: background-color 0.15s ease;
     user-select: none;
     min-height: 60px;
+    min-width: max(600px, calc(var(--name-column-width, 40%) + 240px)); /* 动态计算最小宽度 */
 }
 
 .file-item:hover {
@@ -186,29 +238,6 @@ body, html {
     border-left: 3px solid #2196f3;
 }
 
-.file-select {
-    width: 40px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-.file-select input[type="checkbox"] {
-    margin: 0;
-    cursor: pointer;
-    width: 16px;
-    height: 16px;
-}
-
-.file-name {
-    flex: 1;
-    padding-left: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-}
-
 .file-name-text {
     font-size: 15px;
     font-weight: 600;
@@ -231,16 +260,10 @@ body, html {
 }
 
 .file-info {
-    width: 120px;
-    text-align: center;
-    color: #666;
     font-size: 11px;
 }
 
 .file-size {
-    width: 80px;
-    text-align: right;
-    color: #666;
     font-size: 12px;
 }
 
@@ -557,6 +580,29 @@ body, html {
     background: #a8a8a8;
 }
 
+/* 文件列表水平滚动条样式 */
+.file-list::-webkit-scrollbar {
+    height: 10px;
+}
+
+.file-list::-webkit-scrollbar-track {
+    background: #f8f9fa;
+    border-radius: 5px;
+}
+
+.file-list::-webkit-scrollbar-thumb {
+    background: #dee2e6;
+    border-radius: 5px;
+}
+
+.file-list::-webkit-scrollbar-thumb:hover {
+    background: #adb5bd;
+}
+
+.file-list::-webkit-scrollbar-corner {
+    background: #f8f9fa;
+}
+
 /* 响应式设计 */
 @media (max-width: 1200px) {
     .left-panel {
@@ -585,4 +631,52 @@ body, html {
     .right-panel {
         height: 40%;
     }
+}
+
+:root {
+    --name-column-width: 350px;
+    --min-list-width: calc(40px + 350px + 150px + 100px); /* select + name + info + size */
+}
+
+.column-resizer {
+    position: absolute;
+    top: 0;
+    right: -4px;
+    width: 8px;
+    height: 100%;
+    cursor: col-resize;
+    background: transparent;
+    border: none;
+    transition: all 0.2s;
+    z-index: 100;
+    opacity: 0;
+}
+
+.column-resizer:hover {
+    background: rgba(0, 0, 0, 0.05);
+    opacity: 1;
+}
+
+.column-resizer.resizing {
+    background: rgba(0, 0, 0, 0.1);
+    opacity: 1;
+}
+
+.radio-group {
+    display: inline-flex;
+    gap: 15px;
+    vertical-align: middle;
+}
+
+.radio-group label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+}
+
+.setting-group.inline {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 } 

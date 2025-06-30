@@ -14,6 +14,95 @@ class MediaProcessorApp {
         
         // 初始化配置面板
         this.updateConfigPanel(this.currentFileType);
+        
+        // 初始化列宽调整功能
+        this.initializeColumnResizer();
+    }
+
+    initializeColumnResizer() {
+        const resizer = document.querySelector('.column-resizer');
+        const nameColumn = document.querySelector('.header-name');
+        const container = document.querySelector('.left-panel');
+        
+        if (!resizer || !nameColumn || !container) return;
+        
+        let isResizing = false;
+        let startX = 0;
+        let startWidth = 0;
+        
+        window.addEventListener('resize', () => {
+            this.checkHorizontalScroll();
+        });
+        
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            startX = e.clientX;
+            startWidth = nameColumn.offsetWidth;
+            
+            resizer.classList.add('resizing');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            
+            // 创建遮罩层防止鼠标离开
+            const overlay = document.createElement('div');
+            overlay.id = 'resize-overlay';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                cursor: col-resize;
+                z-index: 9999;
+            `;
+            document.body.appendChild(overlay);
+            
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            
+            const deltaX = e.clientX - startX;
+            const newWidth = Math.max(200, Math.min(startWidth + deltaX, container.offsetWidth * 0.7));
+            
+            // 更新CSS变量
+            document.documentElement.style.setProperty('--name-column-width', `${newWidth}px`);
+            
+            // 实时检查水平滚动状态
+            this.checkHorizontalScroll();
+            
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('resizing');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                
+                // 移除遮罩层
+                const overlay = document.getElementById('resize-overlay');
+                if (overlay) {
+                    overlay.remove();
+                }
+                
+                // 保存设置到localStorage
+                const currentWidth = document.documentElement.style.getPropertyValue('--name-column-width');
+                if (currentWidth) {
+                    localStorage.setItem('nameColumnWidth', currentWidth);
+                }
+            }
+        });
+        
+        // 恢复保存的列宽设置
+        const savedWidth = localStorage.getItem('nameColumnWidth');
+        if (savedWidth) {
+            document.documentElement.style.setProperty('--name-column-width', savedWidth);
+        } else {
+            document.documentElement.style.setProperty('--name-column-width', '350px');
+        }
     }
 
     initializeElements() {
@@ -38,6 +127,10 @@ class MediaProcessorApp {
         this.fileTabs = document.querySelectorAll('.file-tab');
         this.tabContents = document.querySelectorAll('.tab-content');
         this.configTitle = document.getElementById('config-title');
+
+        // MP3 设置元素
+        this.mp3ForceProcessRadios = document.querySelectorAll('input[name="force-process"]');
+        this.mp3ThresholdGroup = document.getElementById('mp3-threshold-group');
     }
 
     bindEvents() {
@@ -64,6 +157,21 @@ class MediaProcessorApp {
         // 监听处理进度
         ipcRenderer.on('processing-progress', (event, progress) => {
             this.updateProgress(progress);
+        });
+
+        // 监听MP3强制处理单选框变化
+        this.mp3ForceProcessRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                this.mp3ThresholdGroup.style.display = (e.target.value === 'yes') ? 'none' : '';
+            });
+        });
+
+        // 同步表头和文件列表的水平滚动
+        this.fileList.addEventListener('scroll', () => {
+            const header = document.querySelector('.file-list-header');
+            if (header) {
+                header.scrollLeft = this.fileList.scrollLeft;
+            }
         });
     }
 
@@ -173,8 +281,6 @@ class MediaProcessorApp {
         });
     }
 
-
-
     updateFileList() {
         this.renderFileList(true); // 首次渲染需要获取详细信息
     }
@@ -199,14 +305,8 @@ class MediaProcessorApp {
             const fileSize = this.formatFileSize(file.size);
             const fileInfo = file.info || '';
             
-            // 获取相对路径显示
-            let displayPath = filePath;
-            if (this.currentFolder && filePath.startsWith(this.currentFolder)) {
-                const relativePath = filePath.substring(this.currentFolder.length);
-                displayPath = relativePath.startsWith('/') || relativePath.startsWith('\\') 
-                    ? relativePath.substring(1) 
-                    : relativePath;
-            }
+            // 使用绝对路径显示
+            const displayPath = filePath;
             
             // 如果已经有信息，直接使用；否则显示加载状态
             const infoDisplay = fileInfo && fileInfo !== '点击处理时获取详情' 
@@ -252,6 +352,9 @@ class MediaProcessorApp {
         this.updateFileCount();
         this.updateSelectAllCheckbox();
         
+        // 检查是否需要水平滚动
+        this.checkHorizontalScroll();
+        
         // 只在需要时获取文件详细信息
         if (loadDetails) {
             this.loadFileDetails(files);
@@ -293,6 +396,19 @@ class MediaProcessorApp {
                 await new Promise(resolve => setTimeout(resolve, 200));
             }
         }
+    }
+
+    checkHorizontalScroll() {
+        setTimeout(() => {
+            const fileList = this.fileList;
+            const hasScroll = fileList.scrollWidth > fileList.clientWidth;
+            
+            if (hasScroll) {
+                fileList.classList.add('has-horizontal-scroll');
+            } else {
+                fileList.classList.remove('has-horizontal-scroll');
+            }
+        }, 100);
     }
 
     selectAllFiles(checked) {
@@ -397,7 +513,7 @@ class MediaProcessorApp {
             bitrate: parseInt(document.getElementById('mp3-bitrate').value),
             threshold: parseInt(document.getElementById('mp3-threshold').value),
             keepStructure: document.getElementById('mp3-keep-structure').checked,
-            forceProcess: document.getElementById('mp3-force-process').checked
+            forceProcess: document.querySelector('input[name="force-process"]:checked').value === 'yes'
         };
 
         this.addLog('info', `🎵 开始处理 ${this.selectedFiles.length} 个MP3文件`);
