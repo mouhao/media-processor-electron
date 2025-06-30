@@ -141,4 +141,15 @@ ipcMain.handle('check-ffmpeg', async () => {
   } catch (error) {
     return { success: false, available: false, error: error.message };
   }
+});
+
+// 获取单个文件的详细信息
+ipcMain.handle('get-file-details', async (event, { filePath, fileType }) => {
+  try {
+    const processor = new MediaProcessor();
+    const details = await processor.getFileDetails(filePath, fileType);
+    return { success: true, details };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
 }); 

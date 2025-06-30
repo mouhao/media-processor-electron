@@ -166,7 +166,9 @@ class MediaProcessorApp {
                         <input type="checkbox" data-index="${index}">
                     </div>
                     <div class="file-name" title="${fileName}">${fileName}</div>
-                    <div class="file-info">${fileInfo}</div>
+                    <div class="file-info" data-file-index="${index}">
+                        <span class="loading-spinner"></span>正在获取信息...
+                    </div>
                     <div class="file-size">${fileSize}</div>
                 </div>
             `;
@@ -193,6 +195,46 @@ class MediaProcessorApp {
         
         this.updateFileCount();
         this.updateSelectAllCheckbox();
+        
+        // 延迟自动获取文件详细信息
+        this.loadFileDetails(files);
+    }
+
+    async loadFileDetails(files) {
+        // 延迟1秒开始获取，避免界面卡顿
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            try {
+                const result = await ipcRenderer.invoke('get-file-details', {
+                    filePath: file.path,
+                    fileType: this.currentFileType
+                });
+                
+                if (result.success) {
+                    // 更新文件信息显示
+                    const infoElement = this.fileList.querySelector(`[data-file-index="${i}"]`);
+                    if (infoElement) {
+                        infoElement.innerHTML = result.details.info;
+                    }
+                    
+                    // 更新内存中的文件信息
+                    this.mediaFiles[this.currentFileType][i].info = result.details.info;
+                }
+            } catch (error) {
+                console.error(`获取文件 ${file.name} 信息失败:`, error);
+                const infoElement = this.fileList.querySelector(`[data-file-index="${i}"]`);
+                if (infoElement) {
+                    infoElement.innerHTML = '获取信息失败';
+                }
+            }
+            
+            // 每个文件之间间隔200ms，避免过度占用资源
+            if (i < files.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+        }
     }
 
     selectAllFiles(checked) {
@@ -261,13 +303,17 @@ class MediaProcessorApp {
 
     async processMp3Files() {
         const options = {
-            targetBitrate: parseInt(document.getElementById('mp3-bitrate').value),
-            bitrateThreshold: parseInt(document.getElementById('mp3-threshold').value),
-            keepStructure: document.getElementById('mp3-keep-structure').checked
+            bitrate: parseInt(document.getElementById('mp3-bitrate').value),
+            threshold: parseInt(document.getElementById('mp3-threshold').value),
+            keepStructure: document.getElementById('mp3-keep-structure').checked,
+            forceProcess: document.getElementById('mp3-force-process').checked
         };
 
         this.addLog('info', `🎵 开始处理 ${this.selectedFiles.length} 个MP3文件`);
-        this.addLog('info', `⚙️ 目标比特率: ${options.targetBitrate}kbps, 阈值: ${options.bitrateThreshold}kbps`);
+        this.addLog('info', `⚙️ 目标比特率: ${options.bitrate}kbps, 阈值: ${options.threshold}kbps`);
+        if (options.forceProcess) {
+            this.addLog('info', `💪 强制处理模式：将处理所有文件，忽略比特率阈值`);
+        }
 
         const result = await ipcRenderer.invoke('process-mp3-files', {
             folderPath: this.currentFolder,
@@ -276,8 +322,19 @@ class MediaProcessorApp {
         });
 
         if (result.success) {
-            const { processed, skipped, failed } = result.result;
+            const { processed, skipped, failed, details } = result.result;
             this.addLog('success', `✅ MP3处理完成: 成功 ${processed}, 跳过 ${skipped}, 失败 ${failed}`);
+            
+            // 显示详细的处理结果
+            details.forEach(detail => {
+                if (detail.status === 'skipped') {
+                    this.addLog('warning', `⏭️ ${detail.file}: ${detail.message}`);
+                } else if (detail.status === 'error') {
+                    this.addLog('error', `❌ ${detail.file}: ${detail.message}`);
+                } else if (detail.status === 'success') {
+                    this.addLog('info', `✅ ${detail.file}: ${detail.message}`);
+                }
+            });
         } else {
             this.addLog('error', `MP3处理失败: ${result.error}`);
         }
@@ -287,13 +344,13 @@ class MediaProcessorApp {
         const options = {
             lessonName: document.getElementById('lesson-name').value || 'lesson',
             resolution: document.getElementById('video-resolution').value,
-            videoBitrate: parseInt(document.getElementById('video-bitrate').value),
+            bitrate: parseInt(document.getElementById('video-bitrate').value),
             segmentDuration: parseInt(document.getElementById('segment-duration').value),
-            renameFiles: document.getElementById('video-rename').checked
+            rename: document.getElementById('video-rename').checked
         };
 
         this.addLog('info', `🎬 开始处理 ${this.selectedFiles.length} 个视频文件`);
-        this.addLog('info', `⚙️ 课程: ${options.lessonName}, 分辨率: ${options.resolution}, 比特率: ${options.videoBitrate}k`);
+        this.addLog('info', `⚙️ 课程: ${options.lessonName}, 分辨率: ${options.resolution}, 比特率: ${options.bitrate}k`);
 
         const result = await ipcRenderer.invoke('process-video-files', {
             folderPath: this.currentFolder,

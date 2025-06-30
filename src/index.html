@@ -70,14 +70,28 @@
                         </select>
                     </div>
                     <div class="setting-group">
-                        <label for="mp3-threshold">比特率阈值：</label>
-                        <input type="number" id="mp3-threshold" value="64" min="32" max="320">
-                        <span class="help-text">只处理高于此比特率的文件</span>
+                        <label for="mp3-threshold">比特率阈值(只处理高于此比特率的文件)：</label>
+                        <select id="mp3-threshold">
+                            <option value="32">32 kbps</option>
+                            <option value="64" selected>64 kbps</option>
+                            <option value="96">96 kbps</option>
+                            <option value="128">128 kbps</option>
+                            <option value="192">192 kbps</option>
+                            <option value="256">256 kbps</option>
+                            <option value="320">320 kbps</option>
+                        </select>
+                        <span class="help-text">少于等于该阈值的文件不处理</span>
                     </div>
                     <div class="setting-group">
                         <label>
                             <input type="checkbox" id="mp3-keep-structure" checked>
                             保持文件夹结构
+                        </label>
+                    </div>
+                    <div class="setting-group">
+                        <label>
+                            <input type="checkbox" id="mp3-force-process">
+                            强制处理所有文件（忽略比特率阈值）
                         </label>
                     </div>
                 </div>
