@@ -4,7 +4,7 @@ const { spawn } = require('child_process');
 const { getMp3Bitrate } = require('./common-processor');
 
 async function processMp3Files(progressCallback, folderPath, outputPath, files, options) {
-    const { bitrate = 64, threshold = 64, keepStructure = true, forceProcess = false } = options;
+    const { bitrate = 64, threshold = 64, keepStructure = true, forceProcess = false, encodingMode = 'abr' } = options;
     await fs.mkdir(outputPath, { recursive: true });
 
     const results = [];
@@ -33,8 +33,8 @@ async function processMp3Files(progressCallback, folderPath, outputPath, files, 
                     outputFilePath = path.join(outputPath, file.name);
                 }
 
-                await compressMp3(file.path, outputFilePath, bitrate);
-                results.push({ file: file.name, status: 'success', message: `压缩成功 -> ${bitrate}kbps` });
+                await compressMp3(file.path, outputFilePath, bitrate, encodingMode);
+                results.push({ file: file.name, status: 'success', message: `压缩成功 -> ${bitrate}kbps (${encodingMode.toUpperCase()})` });
             }
         } catch (error) {
             results.push({ file: file.name, status: 'error', message: error.message });
@@ -50,14 +50,20 @@ async function processMp3Files(progressCallback, folderPath, outputPath, files, 
     };
 }
 
-function compressMp3(inputPath, outputPath, bitrate) {
+function compressMp3(inputPath, outputPath, bitrate, encodingMode) {
     return new Promise((resolve, reject) => {
-        const ffmpeg = spawn('ffmpeg', [
+        const args = [
             '-i', inputPath,
             '-b:a', `${bitrate}k`,
-            '-y', // Overwrite output file if it exists
-            outputPath
-        ]);
+        ];
+
+        if (encodingMode === 'cbr') {
+            args.push('-minrate', `${bitrate}k`, '-maxrate', `${bitrate}k`);
+        }
+        
+        args.push('-y', outputPath); // Overwrite output file
+
+        const ffmpeg = spawn('ffmpeg', args);
 
         let stderr = '';
         ffmpeg.stderr.on('data', (data) => {

@@ -511,6 +511,7 @@ class MediaProcessorApp {
     async processMp3Files() {
         const options = {
             bitrate: parseInt(document.getElementById('mp3-bitrate').value),
+            encodingMode: document.querySelector('input[name="encoding-mode"]:checked').value,
             threshold: parseInt(document.getElementById('mp3-threshold').value),
             keepStructure: document.getElementById('mp3-keep-structure').checked,
             forceProcess: document.querySelector('input[name="force-process"]:checked').value === 'yes'
