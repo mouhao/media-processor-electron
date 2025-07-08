@@ -23,8 +23,8 @@
     "desktop-app"
   ],
   "author": {
-    "name": "Developer",
-    "email": "developer@example.com"
+    "name": "hgh",
+    "email": "mouhao1986@gmail.com"
   },
   "license": "MIT",
   "devDependencies": {
@@ -47,6 +47,15 @@
       "main.js",
       "src/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "bin",
+        "to": "bin",
+        "filter": [
+          "**/*"
+        ]
+      }
     ],
     "mac": {
       "icon": "src/assets/icons/media.ico",

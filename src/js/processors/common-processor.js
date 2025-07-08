@@ -1,6 +1,45 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { spawn } = require('child_process');
+const { app } = require('electron');
+
+// 新增：获取FFmpeg和ffprobe的路径
+function getFfmpegPaths() {
+    const isPackaged = app.isPackaged;
+    const isMac = process.platform === 'darwin';
+    const isWin = process.platform === 'win32';
+
+    let ffmpegPath, ffprobePath;
+
+    if (isPackaged) {
+        // 在打包后的应用中，可执行文件位于 resources 目录下
+        const resourcesPath = process.resourcesPath;
+        if (isMac) {
+            ffmpegPath = path.join(resourcesPath, 'bin', 'mac', 'ffmpeg');
+            ffprobePath = path.join(resourcesPath, 'bin', 'mac', 'ffprobe');
+        } else if (isWin) {
+            ffmpegPath = path.join(resourcesPath, 'bin', 'win', 'ffmpeg.exe');
+            ffprobePath = path.join(resourcesPath, 'bin', 'win', 'ffprobe.exe');
+        }
+    } else {
+        // 在开发模式下，路径相对于项目根目录
+        const basePath = path.join(__dirname, '..', '..', '..');
+        if (isMac) {
+            ffmpegPath = path.join(basePath, 'bin', 'mac', 'ffmpeg');
+            ffprobePath = path.join(basePath, 'bin', 'mac', 'ffprobe');
+        } else if (isWin) {
+            ffmpegPath = path.join(basePath, 'bin', 'win', 'ffmpeg.exe');
+            ffprobePath = path.join(basePath, 'bin', 'win', 'ffprobe.exe');
+        }
+    }
+    
+    if (!ffmpegPath || !ffprobePath) {
+        // 如果平台不支持或路径未定义，则返回null
+        return { ffmpegPath: null, ffprobePath: null };
+    }
+
+    return { ffmpegPath, ffprobePath };
+}
 
 // 报告进度 (需要从主进程传入回调)
 function reportProgress(progressCallback, progress) {
@@ -9,18 +48,104 @@ function reportProgress(progressCallback, progress) {
     }
 }
 
-// 检查 FFmpeg 是否可用
+// 检查 FFmpeg 是否可用（超快速版本）
 async function checkFfmpeg() {
+  const { ffmpegPath, ffprobePath } = getFfmpegPaths();
+  
+  if (!ffmpegPath || !ffprobePath) {
+      console.error('FFmpeg path not found for this platform.');
+      return false;
+  }
+  
+  // 检查文件是否存在
+  const fs = require('fs');
+  if (!fs.existsSync(ffmpegPath) || !fs.existsSync(ffprobePath)) {
+      console.error('FFmpeg or ffprobe file does not exist');
+      return false;
+  }
+  
+  // 在 Unix 系统上检查执行权限
+  if (process.platform !== 'win32') {
+      try {
+          const ffmpegStats = fs.statSync(ffmpegPath);
+          const ffprobeStats = fs.statSync(ffprobePath);
+          
+          // 检查是否有执行权限 (owner execute permission)
+          if (!(ffmpegStats.mode & parseInt('100', 8)) || !(ffprobeStats.mode & parseInt('100', 8))) {
+              console.error('FFmpeg or ffprobe files do not have execute permission');
+              return false;
+          }
+      } catch (error) {
+          console.error('Error checking FFmpeg file permissions:', error);
+          return false;
+      }
+  }
+  
+  // 所有检查都通过
+  return true;
+}
+
+// 检查 FFmpeg 是否可用
+async function checkFfmpeg_old() {
     return new Promise((resolve) => {
-        const ffmpeg = spawn('ffmpeg', ['-version'], { stdio: 'pipe' });
+        const { ffmpegPath } = getFfmpegPaths();
         
-        ffmpeg.on('error', () => resolve(false));
-        ffmpeg.on('close', (code) => resolve(code === 0));
+        if (!ffmpegPath) {
+            console.error('FFmpeg path not found for this platform.');
+            return resolve(false);
+        }
         
-        setTimeout(() => {
-            ffmpeg.kill();
-            resolve(false);
+        // 检查文件是否存在
+        const fs = require('fs');
+        if (!fs.existsSync(ffmpegPath)) {
+            console.error('FFmpeg file does not exist at path:', ffmpegPath);
+            return resolve(false);
+        }
+        
+        const ffmpeg = spawn(ffmpegPath, ['-version'], { 
+            stdio: ['ignore', 'pipe', 'pipe'],
+            detached: false
+        });
+        
+        let resolved = false;
+        let errorOutput = '';
+        
+        ffmpeg.stderr.on('data', (data) => {
+            errorOutput += data.toString();
+        });
+
+        ffmpeg.on('error', (err) => {
+            if (!resolved) {
+                resolved = true;
+                console.error('Failed to start FFmpeg process:', err);
+                resolve(false);
+            }
+        });
+        
+        ffmpeg.on('close', (code) => {
+            if (!resolved) {
+                resolved = true;
+                if (code !== 0) {
+                    console.error(`FFmpeg process exited with code ${code}. Stderr: ${errorOutput}`);
+                }
+                resolve(code === 0);
+            }
+        });
+        
+        // 超时保护
+        const timeoutId = setTimeout(() => {
+            if (!resolved) {
+                resolved = true;
+                ffmpeg.kill('SIGTERM');
+                console.error('FFmpeg check timed out');
+                resolve(false);
+            }
         }, 5000);
+        
+        // 清理超时定时器
+        ffmpeg.on('close', () => {
+            clearTimeout(timeoutId);
+        });
     });
 }
 
@@ -84,7 +209,12 @@ async function getFileDetails(filePath, fileType) {
 // 使用 ffprobe 获取元数据
 function runFfprobe(args) {
     return new Promise((resolve, reject) => {
-        const ffprobe = spawn('ffprobe', args);
+        const { ffprobePath } = getFfmpegPaths();
+        if (!ffprobePath) {
+            return reject(new Error('ffprobe not found for this platform.'));
+        }
+
+        const ffprobe = spawn(ffprobePath, args);
         let output = '';
         let errorOutput = '';
 
@@ -136,10 +266,14 @@ function formatDuration(seconds) {
     }
 }
 
+const { ffmpegPath, ffprobePath } = getFfmpegPaths();
+
 module.exports = {
     reportProgress,
     checkFfmpeg,
     scanMediaFiles,
     getFileDetails,
     getMp3Bitrate,
+    ffmpegPath,
+    ffprobePath,
 }; 

@@ -1,7 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { spawn } = require('child_process');
-const { getMp3Bitrate } = require('./common-processor');
+const { getMp3Bitrate, ffmpegPath } = require('./common-processor');
 
 async function processMp3Files(progressCallback, folderPath, outputPath, files, options) {
     const { bitrate = 64, threshold = 64, keepStructure = true, forceProcess = false, encodingMode = 'abr' } = options;
@@ -52,6 +52,10 @@ async function processMp3Files(progressCallback, folderPath, outputPath, files, 
 
 function compressMp3(inputPath, outputPath, bitrate, encodingMode) {
     return new Promise((resolve, reject) => {
+        if (!ffmpegPath) {
+            return reject(new Error('FFmpeg not found. Please check your installation and configuration.'));
+        }
+
         const args = [
             '-i', inputPath,
             '-b:a', `${bitrate}k`,
@@ -63,7 +67,7 @@ function compressMp3(inputPath, outputPath, bitrate, encodingMode) {
         
         args.push('-y', outputPath); // Overwrite output file
 
-        const ffmpeg = spawn('ffmpeg', args);
+        const ffmpeg = spawn(ffmpegPath, args);
 
         let stderr = '';
         ffmpeg.stderr.on('data', (data) => {

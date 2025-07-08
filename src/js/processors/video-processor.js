@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { spawn } = require('child_process');
+const { ffmpegPath } = require('./common-processor');
 
 async function processVideoFiles(progressCallback, folderPath, outputPath, files, options) {
     const outputDir = path.join(outputPath, 'video_output');
@@ -26,6 +27,10 @@ async function processVideoFiles(progressCallback, folderPath, outputPath, files
 
 function processVideo(inputPath, outputBasePath, options) {
     return new Promise((resolve, reject) => {
+        if (!ffmpegPath) {
+            return reject(new Error('FFmpeg not found. Please check your installation and configuration.'));
+        }
+        
         const {
             lessonName,
             resolution,
@@ -68,7 +73,7 @@ function processVideo(inputPath, outputBasePath, options) {
             path.join(outputDir, 'index.m3u8')
         ];
 
-        const ffmpeg = spawn('ffmpeg', args);
+        const ffmpeg = spawn(ffmpegPath, args);
 
         let stderr = '';
         ffmpeg.stderr.on('data', (data) => { stderr += data.toString(); });
