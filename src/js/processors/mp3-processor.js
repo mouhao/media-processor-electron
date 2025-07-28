@@ -3,7 +3,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { getMp3Bitrate, ffmpegPath } = require('./common-processor');
 
-async function processMp3Files(progressCallback, folderPath, outputPath, files, options) {
+async function processMp3Files(progressCallback, logCallback, folderPath, outputPath, files, options) {
     const { bitrate = 64, threshold = 64, keepStructure = true, forceProcess = false, encodingMode = 'abr' } = options;
     await fs.mkdir(outputPath, { recursive: true });
 
@@ -23,6 +23,9 @@ async function processMp3Files(progressCallback, folderPath, outputPath, files, 
                     status: 'skipped',
                     message: `跳过: 当前比特率 ${currentBitrate}kbps <= 阈值 ${threshold}kbps`
                 });
+                if (logCallback) {
+                    logCallback('info', `跳过文件 ${file.name}: 当前比特率 ${currentBitrate}kbps <= 阈值 ${threshold}kbps`);
+                }
             } else {
                 let outputFilePath;
                 if (keepStructure) {
@@ -33,11 +36,17 @@ async function processMp3Files(progressCallback, folderPath, outputPath, files, 
                     outputFilePath = path.join(outputPath, file.name);
                 }
 
-                await compressMp3(file.path, outputFilePath, bitrate, encodingMode);
+                await compressMp3(file.path, outputFilePath, bitrate, encodingMode, logCallback);
                 results.push({ file: file.name, status: 'success', message: `压缩成功 -> ${bitrate}kbps (${encodingMode.toUpperCase()})` });
+                if (logCallback) {
+                    logCallback('success', `✅ ${file.name} 压缩成功 -> ${bitrate}kbps (${encodingMode.toUpperCase()})`);
+                }
             }
         } catch (error) {
             results.push({ file: file.name, status: 'error', message: error.message });
+            if (logCallback) {
+                logCallback('error', `❌ ${file.name} 处理失败: ${error.message}`);
+            }
         }
         processedCount++;
     }
@@ -50,7 +59,7 @@ async function processMp3Files(progressCallback, folderPath, outputPath, files, 
     };
 }
 
-function compressMp3(inputPath, outputPath, bitrate, encodingMode) {
+function compressMp3(inputPath, outputPath, bitrate, encodingMode, logCallback) {
     return new Promise((resolve, reject) => {
         if (!ffmpegPath) {
             return reject(new Error('FFmpeg not found. Please check your installation and configuration.'));
@@ -66,6 +75,14 @@ function compressMp3(inputPath, outputPath, bitrate, encodingMode) {
         }
         
         args.push('-y', outputPath); // Overwrite output file
+
+        // 构建完整的命令字符串用于日志
+        const command = `${ffmpegPath} ${args.join(' ')}`;
+        
+        // 打印命令到日志
+        if (logCallback) {
+            logCallback('command', `🔧 执行命令: ${command}`);
+        }
 
         const ffmpeg = spawn(ffmpegPath, args);
 

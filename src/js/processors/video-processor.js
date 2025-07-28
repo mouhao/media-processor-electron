@@ -3,7 +3,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { ffmpegPath } = require('./common-processor');
 
-async function processVideoFiles(progressCallback, folderPath, outputPath, files, options) {
+async function processVideoFiles(progressCallback, logCallback, folderPath, outputPath, files, options) {
     const outputDir = path.join(outputPath, 'video_output');
     await fs.mkdir(outputDir, { recursive: true });
 
@@ -14,18 +14,24 @@ async function processVideoFiles(progressCallback, folderPath, outputPath, files
     for (const file of files) {
         progressCallback({ current: processedCount, total: totalFiles, file: file.name, status: 'processing' });
         try {
-            await processVideo(file.path, outputDir, options);
+            await processVideo(file.path, outputDir, options, logCallback);
             results.processed++;
+            if (logCallback) {
+                logCallback('success', `✅ ${file.name} 视频处理成功`);
+            }
         } catch (error) {
             console.error(`Error processing video ${file.name}:`, error);
             results.failed++;
+            if (logCallback) {
+                logCallback('error', `❌ ${file.name} 视频处理失败: ${error.message}`);
+            }
         }
         processedCount++;
     }
     return results;
 }
 
-function processVideo(inputPath, outputBasePath, options) {
+function processVideo(inputPath, outputBasePath, options, logCallback) {
     return new Promise((resolve, reject) => {
         if (!ffmpegPath) {
             return reject(new Error('FFmpeg not found. Please check your installation and configuration.'));
@@ -72,6 +78,14 @@ function processVideo(inputPath, outputBasePath, options) {
             '-f', 'hls',
             path.join(outputDir, 'index.m3u8')
         ];
+
+        // 构建完整的命令字符串用于日志
+        const command = `${ffmpegPath} ${args.join(' ')}`;
+        
+        // 打印命令到日志
+        if (logCallback) {
+            logCallback('command', `🔧 执行命令: ${command}`);
+        }
 
         const ffmpeg = spawn(ffmpegPath, args);
 

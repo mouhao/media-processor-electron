@@ -81,6 +81,15 @@ const progressCallback = (progress) => {
   }
 };
 
+// 日志回调函数，传递给处理器
+const logCallback = (type, message) => {
+  if (mainWindow) {
+    mainWindow.webContents.send('processing-log', { type, message });
+  }
+  // 同时在终端打印
+  console.log(`[${type.toUpperCase()}] ${message}`);
+};
+
 // 选择文件夹对话框
 ipcMain.handle('select-folder', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
@@ -109,7 +118,7 @@ ipcMain.handle('scan-media-files', async (event, folderPath) => {
 // 处理MP3文件
 ipcMain.handle('process-mp3-files', async (event, { folderPath, outputPath, files, options }) => {
   try {
-    const result = await processMp3Files(progressCallback, folderPath, outputPath, files, options);
+    const result = await processMp3Files(progressCallback, logCallback, folderPath, outputPath, files, options);
     return { success: true, result };
   } catch (error) {
     console.error('处理MP3文件时出错:', error);
@@ -120,7 +129,7 @@ ipcMain.handle('process-mp3-files', async (event, { folderPath, outputPath, file
 // 处理视频文件
 ipcMain.handle('process-video-files', async (event, { folderPath, outputPath, files, options }) => {
   try {
-    const result = await processVideoFiles(progressCallback, folderPath, outputPath, files, options);
+    const result = await processVideoFiles(progressCallback, logCallback, folderPath, outputPath, files, options);
     return { success: true, result };
   } catch (error) {
     console.error('处理视频文件时出错:', error);

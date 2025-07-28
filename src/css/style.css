@@ -500,7 +500,20 @@ body, html {
 
 .log-entry.error {
     background-color: #ffebee;
-    color: #c62828;
+    color: #ff6b6b;
+}
+
+.log-entry.command {
+    color: #9b59b6;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 12px;
+    background-color: #f8f9fa;
+    padding: 4px 8px;
+    border-left: 3px solid #9b59b6;
+    margin: 2px 0;
+    border-radius: 2px;
+    white-space: pre-wrap;
+    word-break: break-all;
 }
 
 /* Buttons */

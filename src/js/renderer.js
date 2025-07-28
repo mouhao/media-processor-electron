@@ -159,6 +159,11 @@ class MediaProcessorApp {
             this.updateProgress(progress);
         });
 
+        // 监听处理日志
+        ipcRenderer.on('processing-log', (event, log) => {
+            this.addLog(log.type, log.message);
+        });
+
         // 监听MP3强制处理单选框变化
         this.mp3ForceProcessRadios.forEach(radio => {
             radio.addEventListener('change', (e) => {
