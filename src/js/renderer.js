@@ -3,7 +3,7 @@ const { ipcRenderer } = require('electron');
 class MediaProcessorApp {
     constructor() {
         this.currentFolder = null;
-        this.mediaFiles = { mp3: [], video: [] };
+        this.mediaFiles = { mp3: [], video: [], compose: [] };
         this.selectedFiles = [];
         this.currentFileType = 'mp3';
         this.isProcessing = false;
@@ -131,6 +131,21 @@ class MediaProcessorApp {
         // MP3 设置元素
         this.mp3ForceProcessRadios = document.querySelectorAll('input[name="force-process"]');
         this.mp3ThresholdGroup = document.getElementById('mp3-threshold-group');
+        
+        // 视频合成设置元素
+        this.composeTypeSelect = document.getElementById('compose-type');
+        this.composeResolutionSelect = document.getElementById('compose-resolution');
+        this.composeAspectSelect = document.getElementById('compose-aspect');
+        this.composeQualitySelect = document.getElementById('compose-quality');
+        this.backgroundColorGroup = document.getElementById('background-color-group');
+        this.customResolutionGroup = document.getElementById('custom-resolution-group');
+        this.customQualityGroup = document.getElementById('custom-quality-group');
+        this.customWidthInput = document.getElementById('custom-width');
+        this.customHeightInput = document.getElementById('custom-height');
+        this.concatSettings = document.getElementById('concat-settings');
+        this.multiVideoSettings = document.getElementById('multi-video-settings');
+        this.pipPositionGroup = document.getElementById('pip-position');
+        this.pipSizeGroup = document.getElementById('pip-size');
     }
 
     bindEvents() {
@@ -170,6 +185,34 @@ class MediaProcessorApp {
                 this.mp3ThresholdGroup.style.display = (e.target.value === 'yes') ? 'none' : '';
             });
         });
+
+        // 监听视频合成类型变化
+        if (this.composeTypeSelect) {
+            this.composeTypeSelect.addEventListener('change', (e) => {
+                this.updateComposeSettings(e.target.value);
+            });
+        }
+
+        // 监听分辨率选择变化
+        if (this.composeResolutionSelect) {
+            this.composeResolutionSelect.addEventListener('change', (e) => {
+                this.updateResolutionSettings(e.target.value);
+            });
+        }
+
+        // 监听宽高比处理变化
+        if (this.composeAspectSelect) {
+            this.composeAspectSelect.addEventListener('change', (e) => {
+                this.updateAspectRatioSettings(e.target.value);
+            });
+        }
+
+        // 监听质量预设变化
+        if (this.composeQualitySelect) {
+            this.composeQualitySelect.addEventListener('change', (e) => {
+                this.updateQualitySettings(e.target.value);
+            });
+        }
 
         // 同步表头和文件列表的水平滚动
         this.fileList.addEventListener('scroll', () => {
@@ -263,6 +306,22 @@ class MediaProcessorApp {
         // 更新配置面板
         this.updateConfigPanel(type);
         
+        // 如果是合成视频标签页，初始化合成设置显示状态
+        if (type === 'compose') {
+            if (this.composeTypeSelect) {
+                this.updateComposeSettings(this.composeTypeSelect.value);
+            }
+            if (this.composeResolutionSelect) {
+                this.updateResolutionSettings(this.composeResolutionSelect.value);
+            }
+            if (this.composeAspectSelect) {
+                this.updateAspectRatioSettings(this.composeAspectSelect.value);
+            }
+            if (this.composeQualitySelect) {
+                this.updateQualitySettings(this.composeQualitySelect.value);
+            }
+        }
+        
         // 检查是否需要获取详细信息
         const files = this.mediaFiles[type] || [];
         const needsDetails = files.some(file => 
@@ -278,6 +337,8 @@ class MediaProcessorApp {
             this.configTitle.textContent = 'MP3压缩配置';
         } else if (type === 'video') {
             this.configTitle.textContent = '视频处理配置';
+        } else if (type === 'compose') {
+            this.configTitle.textContent = '视频合成配置';
         }
         
         // 更新配置内容
@@ -291,13 +352,16 @@ class MediaProcessorApp {
     }
 
     renderFileList(loadDetails = false) {
-        const files = this.mediaFiles[this.currentFileType] || [];
+        // 合成视频模式使用video文件列表
+        const files = this.currentFileType === 'compose' ? 
+            this.mediaFiles.video : 
+            this.mediaFiles[this.currentFileType] || [];
         this.selectedFiles = [];
         
         if (files.length === 0) {
             this.fileList.innerHTML = `
                 <div class="empty-state">
-                    <p>未找到${this.currentFileType === 'mp3' ? 'MP3' : '视频'}文件</p>
+                    <p>未找到${this.getFileTypeName()}文件</p>
                 </div>
             `;
             this.updateFileCount();
@@ -370,12 +434,15 @@ class MediaProcessorApp {
         // 延迟1秒开始获取，避免界面卡顿
         await new Promise(resolve => setTimeout(resolve, 1000));
         
+        // 确定实际的文件类型：合成视频模式使用video类型
+        const actualFileType = this.currentFileType === 'compose' ? 'video' : this.currentFileType;
+        
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
             try {
                 const result = await ipcRenderer.invoke('get-file-details', {
                     filePath: file.path,
-                    fileType: this.currentFileType
+                    fileType: actualFileType  // 使用实际的文件类型
                 });
                 
                 if (result.success) {
@@ -385,8 +452,10 @@ class MediaProcessorApp {
                         infoElement.innerHTML = result.details.info;
                     }
                     
-                    // 更新内存中的文件信息
-                    this.mediaFiles[this.currentFileType][i].info = result.details.info;
+                    // 更新内存中的文件信息，使用正确的数组
+                    if (this.mediaFiles[actualFileType] && this.mediaFiles[actualFileType][i]) {
+                        this.mediaFiles[actualFileType][i].info = result.details.info;
+                    }
                 }
             } catch (error) {
                 console.error(`获取文件 ${file.name} 信息失败:`, error);
@@ -417,7 +486,9 @@ class MediaProcessorApp {
     }
 
     selectAllFiles(checked) {
-        const files = this.mediaFiles[this.currentFileType] || [];
+        // 确定实际的文件类型：合成视频模式使用video类型
+        const actualFileType = this.currentFileType === 'compose' ? 'video' : this.currentFileType;
+        const files = this.mediaFiles[actualFileType] || [];
         const checkboxes = this.fileList.querySelectorAll('input[type="checkbox"]');
         
         checkboxes.forEach(checkbox => {
@@ -433,12 +504,14 @@ class MediaProcessorApp {
         
         const removedCount = this.selectedFiles.length;
         const fileType = this.currentFileType;
+        // 确定实际的文件类型：合成视频模式使用video类型
+        const actualFileType = this.currentFileType === 'compose' ? 'video' : this.currentFileType;
         
         // 从mediaFiles中移除选中的文件
         this.selectedFiles.forEach(selectedFile => {
-            const index = this.mediaFiles[fileType].findIndex(file => file.path === selectedFile.path);
+            const index = this.mediaFiles[actualFileType].findIndex(file => file.path === selectedFile.path);
             if (index > -1) {
-                this.mediaFiles[fileType].splice(index, 1);
+                this.mediaFiles[actualFileType].splice(index, 1);
             }
         });
         
@@ -449,11 +522,14 @@ class MediaProcessorApp {
         this.renderFileList(false);
         
         // 记录日志
-        this.addLog('info', `🗑️ 已移除 ${removedCount} 个${fileType === 'mp3' ? 'MP3' : '视频'}文件`);
+        const fileTypeName = fileType === 'mp3' ? 'MP3' : (fileType === 'compose' ? '视频' : '视频');
+        this.addLog('info', `🗑️ 已移除 ${removedCount} 个${fileTypeName}文件`);
     }
 
     updateSelectAllCheckbox() {
-        const files = this.mediaFiles[this.currentFileType] || [];
+        // 确定实际的文件类型：合成视频模式使用video类型
+        const actualFileType = this.currentFileType === 'compose' ? 'video' : this.currentFileType;
+        const files = this.mediaFiles[actualFileType] || [];
         const checkedCount = this.selectedFiles.length;
         
         if (checkedCount === 0) {
@@ -470,7 +546,9 @@ class MediaProcessorApp {
 
     updateFileCount() {
         const selectedCount = this.selectedFiles.length;
-        const totalCount = this.mediaFiles[this.currentFileType]?.length || 0;
+        // 确定实际的文件类型：合成视频模式使用video类型
+        const actualFileType = this.currentFileType === 'compose' ? 'video' : this.currentFileType;
+        const totalCount = this.mediaFiles[actualFileType]?.length || 0;
         
         if (selectedCount === 0) {
             this.fileCountText.textContent = `共 ${totalCount} 个文件`;
@@ -502,6 +580,8 @@ class MediaProcessorApp {
                 await this.processMp3Files();
             } else if (this.currentFileType === 'video') {
                 await this.processVideoFiles();
+            } else if (this.currentFileType === 'compose') {
+                await this.composeVideos();
             }
         } catch (error) {
             this.addLog('error', `处理失败: ${error.message}`);
@@ -604,6 +684,208 @@ class MediaProcessorApp {
         
         this.logContent.appendChild(logEntry);
         this.logContent.scrollTop = this.logContent.scrollHeight;
+    }
+
+    async composeVideos() {
+        // 验证选择的视频数量
+        const composeType = document.getElementById('compose-type').value;
+        if ((composeType === 'sidebyside' || composeType === 'pip') && this.selectedFiles.length !== 2) {
+            this.addLog('error', `❌ ${composeType === 'sidebyside' ? '并排显示' : '画中画'}模式需要选择恰好2个视频文件`);
+            return;
+        }
+        
+        if (composeType === 'concat' && this.selectedFiles.length < 2) {
+            this.addLog('error', '❌ 顺序拼接模式至少需要选择2个视频文件');
+            return;
+        }
+
+        // 获取分辨率设置
+        const resolutionSetting = document.getElementById('compose-resolution').value;
+        let resolution = resolutionSetting;
+        
+        // 如果选择了自定义分辨率，获取自定义宽高值
+        if (resolutionSetting === 'custom') {
+            const customWidth = parseInt(document.getElementById('custom-width').value);
+            const customHeight = parseInt(document.getElementById('custom-height').value);
+            
+            // 验证自定义分辨率输入
+            if (!customWidth || !customHeight || customWidth < 320 || customHeight < 240) {
+                this.addLog('error', '❌ 请输入有效的自定义分辨率（宽度≥320，高度≥240）');
+                return;
+            }
+            
+            resolution = {
+                type: 'custom',
+                width: customWidth,
+                height: customHeight
+            };
+        }
+
+        // 获取质量设置
+        const qualityPreset = document.getElementById('compose-quality').value;
+        let qualitySettings = { preset: qualityPreset };
+        
+        // 如果选择了自定义质量，获取详细参数
+        if (qualityPreset === 'custom') {
+            qualitySettings = {
+                preset: 'custom',
+                videoProfile: document.getElementById('video-profile').value,
+                videoBitrate: parseInt(document.getElementById('video-bitrate-custom').value),
+                videoFramerate: parseInt(document.getElementById('video-framerate-custom').value),
+                audioBitrate: parseInt(document.getElementById('audio-bitrate-custom').value),
+                audioSamplerate: parseInt(document.getElementById('audio-samplerate').value),
+                encodePreset: document.getElementById('encode-preset').value
+            };
+        }
+
+        // 获取用户设置的选项
+        const options = {
+            composeType: composeType,
+            filename: document.getElementById('compose-filename').value || '合成视频',
+            format: document.getElementById('compose-format').value,
+            quality: qualitySettings,
+            resolution: resolution,
+            aspectRatio: document.getElementById('compose-aspect').value,
+            background: document.getElementById('compose-background').value
+        };
+
+        // 根据合成类型获取特定选项
+        if (composeType === 'concat') {
+            options.transition = document.getElementById('compose-transition').value;
+            options.audioMode = document.getElementById('compose-audio-concat').value;
+        } else {
+            options.audioMode = document.getElementById('compose-audio-multi').value;
+            if (composeType === 'pip') {
+                options.pipPosition = document.getElementById('compose-pip-position').value;
+                options.pipSize = document.getElementById('compose-pip-size').value;
+            }
+        }
+
+        this.addLog('info', `🎭 开始合成 ${this.selectedFiles.length} 个视频文件`);
+        
+        // 显示质量信息
+        let qualityInfo;
+        if (options.quality.preset === 'custom') {
+            qualityInfo = `自定义 (${options.quality.videoBitrate}k, ${options.quality.videoFramerate}fps, ${options.quality.encodePreset})`;
+        } else {
+            const qualityNames = {
+                'high': '高质量',
+                'medium': '平衡',
+                'fast': '快速'
+            };
+            qualityInfo = qualityNames[options.quality.preset] || options.quality.preset;
+        }
+        
+        this.addLog('info', `⚙️ 合成类型: ${this.getComposeTypeName(options.composeType)}, 质量: ${qualityInfo}`);
+        
+        // 显示分辨率信息
+        let resolutionInfo;
+        if (typeof options.resolution === 'object' && options.resolution.type === 'custom') {
+            resolutionInfo = `${options.resolution.width}x${options.resolution.height} (自定义)`;
+        } else {
+            const resolutionNames = {
+                'auto': '自动',
+                '4k': '4K (3840x2160)',
+                '2k': '2K (2560x1440)', 
+                '1080p': '1080p (1920x1080)',
+                '720p': '720p (1280x720)',
+                '480p': '480p (854x480)'
+            };
+            resolutionInfo = resolutionNames[options.resolution] || options.resolution;
+        }
+        
+        this.addLog('info', `📐 分辨率: ${resolutionInfo}, 格式: ${options.format.toUpperCase()}`);
+        this.addLog('info', `📝 输出文件: ${options.filename}.${options.format}`);
+
+        const result = await ipcRenderer.invoke('compose-videos', {
+            outputPath: this.outputFolder.value,
+            files: this.selectedFiles,
+            options
+        });
+
+        if (result.success) {
+            const { processed, failed } = result.result;
+            this.addLog('success', `✅ 视频合成完成: 成功 ${processed}, 失败 ${failed}`);
+        } else {
+            this.addLog('error', `视频合成失败: ${result.error}`);
+        }
+    }
+
+    getComposeTypeName(type) {
+        const typeNames = {
+            'concat': '顺序拼接',
+            'sidebyside': '并排显示',
+            'pip': '画中画'
+        };
+        return typeNames[type] || type;
+    }
+
+    getFileTypeName() {
+        const typeNames = {
+            'mp3': 'MP3',
+            'video': '视频',
+            'compose': '视频'
+        };
+        return typeNames[this.currentFileType] || '文件';
+    }
+
+    updateComposeSettings(composeType) {
+        if (!this.concatSettings || !this.multiVideoSettings) return;
+        
+        if (composeType === 'concat') {
+            // 顺序拼接：显示拼接设置，隐藏多视频设置
+            this.concatSettings.style.display = 'block';
+            this.multiVideoSettings.style.display = 'none';
+        } else {
+            // 并排显示或画中画：显示多视频设置，隐藏拼接设置
+            this.concatSettings.style.display = 'none';
+            this.multiVideoSettings.style.display = 'block';
+            
+            // 画中画需要额外显示位置和大小设置
+            if (composeType === 'pip') {
+                if (this.pipPositionGroup) this.pipPositionGroup.style.display = 'block';
+                if (this.pipSizeGroup) this.pipSizeGroup.style.display = 'block';
+            } else {
+                if (this.pipPositionGroup) this.pipPositionGroup.style.display = 'none';
+                if (this.pipSizeGroup) this.pipSizeGroup.style.display = 'none';
+            }
+        }
+    }
+
+    updateResolutionSettings(resolution) {
+        if (!this.customResolutionGroup) return;
+        
+        if (resolution === 'custom') {
+            // 显示自定义分辨率输入框
+            this.customResolutionGroup.style.display = 'block';
+        } else {
+            // 隐藏自定义分辨率输入框
+            this.customResolutionGroup.style.display = 'none';
+        }
+    }
+
+    updateAspectRatioSettings(aspectRatio) {
+        if (!this.backgroundColorGroup) return;
+        
+        if (aspectRatio === 'pad') {
+            // 保持比例，黑边填充 - 显示背景颜色选项
+            this.backgroundColorGroup.style.display = 'block';
+        } else {
+            // 裁剪或拉伸 - 隐藏背景颜色选项
+            this.backgroundColorGroup.style.display = 'none';
+        }
+    }
+
+    updateQualitySettings(quality) {
+        if (!this.customQualityGroup) return;
+        
+        if (quality === 'custom') {
+            // 自定义质量 - 显示详细参数设置
+            this.customQualityGroup.style.display = 'block';
+        } else {
+            // 预设质量 - 隐藏详细参数设置
+            this.customQualityGroup.style.display = 'none';
+        }
     }
 
     formatFileSize(bytes) {

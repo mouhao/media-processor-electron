@@ -6,6 +6,7 @@ const fs = require('fs').promises;
 const { checkFfmpeg, scanMediaFiles, getFileDetails } = require('./src/js/processors/common-processor.js');
 const { processMp3Files } = require('./src/js/processors/mp3-processor.js');
 const { processVideoFiles } = require('./src/js/processors/video-processor.js');
+const { composeVideos } = require('./src/js/processors/video-composer.js');
 
 // 保持窗口对象的全局引用
 let mainWindow;
@@ -165,6 +166,17 @@ ipcMain.handle('get-default-output-path', async (event, sourcePath) => {
     await fs.mkdir(outputPath, { recursive: true });
     return { success: true, path: outputPath };
   } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// 视频合成处理
+ipcMain.handle('compose-videos', async (event, { outputPath, files, options }) => {
+  try {
+    const result = await composeVideos(progressCallback, logCallback, outputPath, files, options);
+    return { success: true, result };
+  } catch (error) {
+    console.error('合成视频时出错:', error);
     return { success: false, error: error.message };
   }
 }); 

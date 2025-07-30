@@ -261,6 +261,10 @@ body, html {
 
 .file-info {
     font-size: 11px;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .file-size {
@@ -692,4 +696,147 @@ body, html {
     display: flex;
     align-items: center;
     gap: 10px;
+}
+
+/* 条件显示设置组 */
+.conditional-setting {
+    border-left: 3px solid #007bff;
+    background-color: #f8f9fa;
+    border-radius: 0 5px 5px 0;
+    padding: 10px 15px;
+    margin: 10px 0 10px 10px;
+}
+
+.conditional-setting .setting-group {
+    margin-bottom: 10px;
+}
+
+.conditional-setting .setting-group:last-child {
+    margin-bottom: 0;
+}
+
+/* 自定义分辨率输入组 */
+.resolution-input-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 5px;
+}
+
+.input-with-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+}
+
+.input-with-label label {
+    font-size: 12px;
+    color: #666;
+    margin: 0;
+}
+
+.input-with-label input[type="number"] {
+    width: 80px;
+    padding: 5px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    text-align: center;
+    font-size: 14px;
+}
+
+.input-with-label input[type="number"]:focus {
+    border-color: #007bff;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.unit {
+    font-size: 12px;
+    color: #666;
+}
+
+.resolution-separator {
+    font-size: 18px;
+    font-weight: bold;
+    color: #666;
+    margin: 0 5px;
+}
+
+/* 带单位的输入框 */
+.input-with-unit {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.input-with-unit input[type="number"] {
+    width: 100px;
+    padding: 5px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.input-with-unit input[type="number"]:focus {
+    border-color: #007bff;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.input-with-unit .unit {
+    font-size: 13px;
+    color: #666;
+    font-weight: 500;
+}
+
+/* 视频详细信息显示样式 */
+.video-info-detail {
+    font-size: 12px;
+    line-height: 1.3;
+    color: #555;
+    margin: 2px 0;
+}
+
+.video-info-detail .info-row {
+    margin: 1px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.video-info-detail .label {
+    font-weight: 600;
+    color: #333;
+    margin-right: 4px;
+    display: inline-block;
+    min-width: 50px;
+}
+
+.video-info-detail .info-row:first-child {
+    margin-top: 0;
+}
+
+.video-info-detail .info-row:last-child {
+    margin-bottom: 0;
+}
+
+/* 文件信息列样式调整已合并到上面的.file-info选择器中 */
+
+/* 当视频信息详细显示时，调整文件信息列的样式 */
+.file-item .file-info {
+    max-width: none;
+    white-space: normal;
+    overflow: visible;
+}
+
+/* 针对小屏幕的响应式调整 */
+@media (max-width: 1200px) {
+    .video-info-detail {
+        font-size: 11px;
+    }
+    
+    .video-info-detail .label {
+        min-width: 45px;
+    }
 } 

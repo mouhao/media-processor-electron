@@ -197,12 +197,90 @@ async function getFileDetails(filePath, fileType) {
             const bitrate = await getMp3Bitrate(filePath);
             return { info: bitrate ? `${bitrate} kbps` : '未知比特率' };
         } else if (fileType === 'video') {
-            const duration = await getVideoDuration(filePath);
-            return { info: duration ? formatDuration(duration) : '未知时长' };
+            const videoInfo = await getDetailedVideoInfo(filePath);
+            return { info: videoInfo };
         }
         return { info: '未知类型' };
     } catch (error) {
         return { info: '获取信息失败' };
+    }
+}
+
+// 获取详细的视频信息
+async function getDetailedVideoInfo(filePath) {
+    try {
+        const info = await runFfprobe([
+            '-v', 'quiet',
+            '-print_format', 'json',
+            '-show_format',
+            '-show_streams',
+            filePath
+        ]);
+
+        if (!info.streams || info.streams.length === 0) {
+            return '无法获取流信息';
+        }
+
+        // 查找视频流
+        const videoStream = info.streams.find(stream => stream.codec_type === 'video');
+        
+        if (!videoStream) {
+            return '未找到视频流';
+        }
+
+        // 提取视频信息
+        const width = videoStream.width || '未知';
+        const height = videoStream.height || '未知';
+        const resolution = `${width}x${height}`;
+        
+        // 计算帧率
+        let frameRate = '未知';
+        if (videoStream.r_frame_rate) {
+            const [num, den] = videoStream.r_frame_rate.split('/');
+            if (den && parseInt(den) !== 0) {
+                frameRate = Math.round((parseInt(num) / parseInt(den)) * 100) / 100;
+            }
+        }
+        
+        // 获取比特率
+        let bitrate = '未知';
+        if (videoStream.bit_rate) {
+            bitrate = `${Math.round(parseInt(videoStream.bit_rate) / 1000)}k`;
+        } else if (info.format && info.format.bit_rate) {
+            bitrate = `${Math.round(parseInt(info.format.bit_rate) / 1000)}k`;
+        }
+        
+        // 获取编码格式
+        const codec = videoStream.codec_name || '未知';
+        const codecLong = videoStream.codec_long_name || codec;
+        
+        // 获取编码profile
+        let profile = '未知';
+        if (videoStream.profile) {
+            profile = videoStream.profile;
+        }
+        
+        // 获取时长
+        let duration = '未知';
+        if (info.format && info.format.duration) {
+            duration = formatDuration(parseFloat(info.format.duration));
+        }
+
+        // 组装信息字符串，使用HTML格式化
+        return `
+            <div class="video-info-detail">
+                <div class="info-row"><span class="label">分辨率:</span> ${resolution}</div>
+                <div class="info-row"><span class="label">帧率:</span> ${frameRate} fps</div>
+                <div class="info-row"><span class="label">比特率:</span> ${bitrate}bps</div>
+                <div class="info-row"><span class="label">编码:</span> ${codec.toUpperCase()}</div>
+                <div class="info-row"><span class="label">Profile:</span> ${profile}</div>
+                <div class="info-row"><span class="label">时长:</span> ${duration}</div>
+            </div>
+        `;
+        
+    } catch (error) {
+        console.error(`Error getting detailed video info for ${filePath}:`, error);
+        return '获取详细信息失败';
     }
 }
 
