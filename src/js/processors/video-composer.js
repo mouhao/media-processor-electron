@@ -1,13 +1,362 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { spawn } = require('child_process');
-const { ffmpegPath } = require('./common-processor');
+const { ffmpegPath, ffprobePath } = require('./common-processor');
+
+// 分析视频文件的编码信息
+async function analyzeVideosForComposition(files, logCallback) {
+    const videoInfos = [];
+    
+    if (logCallback) {
+        logCallback('info', '🔍 开始分析视频编码信息...');
+    }
+    
+    for (const file of files) {
+        try {
+            const info = await runFfprobe([
+                '-v', 'quiet',
+                '-print_format', 'json',
+                '-show_streams',
+                '-show_format',
+                file.path
+            ]);
+            
+            const videoStream = info.streams.find(s => s.codec_type === 'video');
+            const audioStream = info.streams.find(s => s.codec_type === 'audio');
+            
+            if (!videoStream) {
+                throw new Error(`文件 ${file.name} 中未找到视频流`);
+            }
+            
+            // 计算帧率
+            let frameRate = 25; // 默认值
+            if (videoStream.r_frame_rate) {
+                const [num, den] = videoStream.r_frame_rate.split('/');
+                if (den && parseInt(den) !== 0) {
+                    frameRate = parseInt(num) / parseInt(den);
+                }
+            }
+            
+            videoInfos.push({
+                file: file.path,
+                fileName: file.name,
+                videoCodec: videoStream.codec_name,
+                audioCodec: audioStream?.codec_name || null,
+                frameRate: frameRate,
+                width: videoStream.width,
+                height: videoStream.height,
+                pixelFormat: videoStream.pix_fmt,
+                duration: parseFloat(info.format.duration || 0)
+            });
+            
+            if (logCallback) {
+                logCallback('info', `📊 ${file.name}: ${videoStream.codec_name}编码, ${videoStream.width}x${videoStream.height}, ${frameRate.toFixed(2)}fps`);
+            }
+            
+        } catch (error) {
+            throw new Error(`分析视频文件 ${file.name} 失败: ${error.message}`);
+        }
+    }
+    
+    return videoInfos;
+}
+
+// 使用ffprobe获取视频信息
+function runFfprobe(args) {
+    return new Promise((resolve, reject) => {
+        if (!ffprobePath) {
+            return reject(new Error('ffprobe not found for this platform.'));
+        }
+
+        const ffprobe = spawn(ffprobePath, args);
+        let output = '';
+        let errorOutput = '';
+
+        ffprobe.stdout.on('data', (data) => { output += data.toString(); });
+        ffprobe.stderr.on('data', (data) => { errorOutput += data.toString(); });
+        
+        ffprobe.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    resolve(JSON.parse(output));
+                } catch (e) {
+                    reject(new Error(`Failed to parse ffprobe output: ${e.message}`));
+                }
+            } else {
+                reject(new Error(`ffprobe exited with code ${code}: ${errorOutput}`));
+            }
+        });
+
+        ffprobe.on('error', (err) => reject(err));
+    });
+}
+
+// 编码器兼容性映射
+function getCodecCompatibilityGroup(codec) {
+    const compatibilityGroups = {
+        // H.264 兼容组
+        'h264': 'h264_group',
+        'libx264': 'h264_group',
+        'x264': 'h264_group',
+        
+        // H.265 兼容组  
+        'h265': 'h265_group',
+        'hevc': 'h265_group',
+        'libx265': 'h265_group',
+        
+        // AAC 兼容组
+        'aac': 'aac_group',
+        'libfdk_aac': 'aac_group',
+        'aac_at': 'aac_group',
+        
+        // MP3 兼容组
+        'mp3': 'mp3_group',
+        'libmp3lame': 'mp3_group',
+        'mp3float': 'mp3_group',
+        
+        // WMV 兼容组
+        'wmv1': 'wmv_group',
+        'wmv2': 'wmv_group',
+        'wmv3': 'wmv_group',
+        
+        // WMA 兼容组
+        'wmav1': 'wma_group',
+        'wmav2': 'wma_group'
+    };
+    
+    return compatibilityGroups[codec?.toLowerCase()] || codec?.toLowerCase();
+}
+
+// 检查编码器是否兼容
+function areCodecsCompatible(sourceCodecs, targetCodec) {
+    if (!sourceCodecs || sourceCodecs.length === 0) return true;
+    
+    const targetGroup = getCodecCompatibilityGroup(targetCodec);
+    const sourceGroups = sourceCodecs.map(codec => getCodecCompatibilityGroup(codec));
+    
+    // 如果所有源编码器都与目标编码器兼容，则不需要转换
+    return sourceGroups.every(group => group === targetGroup);
+}
+
+// 判断是否需要预处理
+function needsPreprocessing(videoInfos, targetFormat, targetResolution, logCallback) {
+    if (videoInfos.length === 0) {
+        return { needsPreprocessing: false, analysis: {} };
+    }
+    
+    // 以第一个视频为基准
+    const referenceVideo = videoInfos[0];
+    const referenceCodec = getCodecCompatibilityGroup(referenceVideo.videoCodec);
+    const referenceAudioCodec = getCodecCompatibilityGroup(referenceVideo.audioCodec);
+    const referenceFrameRate = Math.round(referenceVideo.frameRate * 100) / 100;
+    const referenceResolution = `${referenceVideo.width}x${referenceVideo.height}`;
+    const referencePixelFormat = referenceVideo.pixelFormat;
+    
+    // 分析哪些视频需要预处理
+    const videosNeedingPreprocessing = [];
+    const videoCodecs = [];
+    const audioCodecs = [];
+    const frameRates = [];
+    const resolutions = [];
+    const pixelFormats = [];
+    
+    for (let i = 0; i < videoInfos.length; i++) {
+        const video = videoInfos[i];
+        const videoCodec = getCodecCompatibilityGroup(video.videoCodec);
+        const audioCodec = getCodecCompatibilityGroup(video.audioCodec);
+        const frameRate = Math.round(video.frameRate * 100) / 100;
+        const resolution = `${video.width}x${video.height}`;
+        const pixelFormat = video.pixelFormat;
+        
+        videoCodecs.push(video.videoCodec);
+        audioCodecs.push(video.audioCodec);
+        frameRates.push(frameRate);
+        resolutions.push(resolution);
+        pixelFormats.push(pixelFormat);
+        
+        // 检查是否与基准视频不同
+        const needsPreprocessing = 
+            videoCodec !== referenceCodec ||
+            audioCodec !== referenceAudioCodec ||
+            frameRate !== referenceFrameRate ||
+            resolution !== referenceResolution ||
+            pixelFormat !== referencePixelFormat;
+            
+        if (needsPreprocessing) {
+            videosNeedingPreprocessing.push({
+                index: i,
+                fileName: video.fileName,
+                reasons: {
+                    videoCodec: videoCodec !== referenceCodec,
+                    audioCodec: audioCodec !== referenceAudioCodec,
+                    frameRate: frameRate !== referenceFrameRate,
+                    resolution: resolution !== referenceResolution,
+                    pixelFormat: pixelFormat !== referencePixelFormat
+                }
+            });
+        }
+    }
+    
+    const analysis = {
+        referenceVideo: {
+            fileName: referenceVideo.fileName,
+            videoCodec: referenceVideo.videoCodec,
+            audioCodec: referenceVideo.audioCodec,
+            frameRate: referenceFrameRate,
+            resolution: referenceResolution,
+            pixelFormat: referencePixelFormat
+        },
+        videosNeedingPreprocessing,
+        allVideoCodecs: [...new Set(videoCodecs)],
+        allAudioCodecs: [...new Set(audioCodecs.filter(Boolean))],
+        allFrameRates: [...new Set(frameRates)],
+        allResolutions: [...new Set(resolutions)],
+        allPixelFormats: [...new Set(pixelFormats)]
+    };
+    
+    const needsPreprocessing = analysis.needsVideoUnification || 
+                              analysis.needsAudioUnification || 
+                              analysis.needsFrameRateUnification || 
+                              analysis.needsResolutionUnification ||
+                              analysis.needsPixelFormatUnification;
+    
+    const needsPreprocessingFlag = videosNeedingPreprocessing.length > 0;
+    
+    if (logCallback) {
+        logCallback('info', `🎯 以第一个视频为基准: ${referenceVideo.fileName}`);
+        logCallback('info', `📊 基准格式: ${referenceVideo.videoCodec}/${referenceVideo.audioCodec}, ${referenceResolution}, ${referenceFrameRate}fps`);
+        
+        if (needsPreprocessingFlag) {
+            logCallback('info', `⚠️  检测到 ${videosNeedingPreprocessing.length} 个视频需要预处理以匹配基准格式:`);
+            
+            videosNeedingPreprocessing.forEach(video => {
+                const reasons = [];
+                if (video.reasons.videoCodec) reasons.push('视频编码');
+                if (video.reasons.audioCodec) reasons.push('音频编码');
+                if (video.reasons.frameRate) reasons.push('帧率');
+                if (video.reasons.resolution) reasons.push('分辨率');
+                if (video.reasons.pixelFormat) reasons.push('像素格式');
+                
+                logCallback('info', `   - ${video.fileName}: ${reasons.join(', ')}`);
+            });
+        } else {
+            logCallback('info', '✅ 所有视频格式一致，无需预处理');
+        }
+    }
+    
+    return { needsPreprocessing: needsPreprocessingFlag, analysis };
+}
+
+// 预处理视频文件 - 以第一个视频为基准
+async function preprocessVideos(videoInfos, analysisResult, outputDir, progressCallback, logCallback) {
+    const preprocessedFiles = [];
+    const tempDir = path.join(outputDir, 'temp_preprocessed');
+    await fs.mkdir(tempDir, { recursive: true });
+    
+    const referenceVideo = analysisResult.referenceVideo;
+    const videosToPreprocess = analysisResult.videosNeedingPreprocessing;
+    
+    if (logCallback) {
+        logCallback('info', `🔄 开始预处理 ${videosToPreprocess.length} 个视频文件...`);
+        logCallback('info', `🎯 目标格式(基准): ${referenceVideo.videoCodec}/${referenceVideo.audioCodec}, ${referenceVideo.resolution}, ${referenceVideo.frameRate}fps`);
+    }
+    
+    // 首先添加基准视频（不需要预处理）
+    for (let i = 0; i < videoInfos.length; i++) {
+        const videoInfo = videoInfos[i];
+        const needsPreprocessing = videosToPreprocess.find(v => v.index === i);
+        
+        if (!needsPreprocessing) {
+            // 不需要预处理的视频，直接使用原文件
+            preprocessedFiles.push({
+                name: videoInfo.fileName,
+                path: videoInfo.file,
+                original: videoInfo.fileName,
+                isOriginal: true
+            });
+            continue;
+        }
+        
+        // 需要预处理的视频
+        const outputFileName = `preprocessed_${i + 1}_${path.basename(videoInfo.fileName, path.extname(videoInfo.fileName))}.mp4`;
+        const outputPath = path.join(tempDir, outputFileName);
+        
+        if (progressCallback) {
+            progressCallback({ 
+                current: videosToPreprocess.indexOf(needsPreprocessing), 
+                total: videosToPreprocess.length, 
+                status: 'preprocessing', 
+                file: `预处理: ${videoInfo.fileName}` 
+            });
+        }
+        
+        // 使用基准视频的格式参数
+        const [refWidth, refHeight] = referenceVideo.resolution.split('x').map(Number);
+        const args = [
+            '-i', videoInfo.file,
+            '-c:v', referenceVideo.videoCodec === 'h264' ? 'libx264' : referenceVideo.videoCodec,
+            '-pix_fmt', referenceVideo.pixelFormat,
+            '-vf', `scale=${refWidth}:${refHeight}:force_original_aspect_ratio=decrease,pad=${refWidth}:${refHeight}:(ow-iw)/2:(oh-ih)/2:black`,
+            '-r', referenceVideo.frameRate.toString(),
+            '-y' // 覆盖输出文件
+        ];
+        
+        // 处理音频：使用基准视频的音频编码
+        if (videoInfo.audioCodec && referenceVideo.audioCodec) {
+            const audioCodec = referenceVideo.audioCodec === 'aac' ? 'aac' : referenceVideo.audioCodec;
+            args.push('-c:a', audioCodec);
+        } else if (!videoInfo.audioCodec || !referenceVideo.audioCodec) {
+            args.push('-an'); // 移除音频
+        }
+        
+        args.push(outputPath);
+        
+        try {
+            await executeFFmpeg(args, logCallback);
+            preprocessedFiles.push({
+                name: outputFileName,
+                path: outputPath,
+                original: videoInfo.fileName,
+                isOriginal: false
+            });
+            
+            if (logCallback) {
+                logCallback('success', `✅ ${videoInfo.fileName} 预处理完成 → 匹配基准格式`);
+            }
+        } catch (error) {
+            throw new Error(`预处理视频 ${videoInfo.fileName} 失败: ${error.message}`);
+        }
+    }
+    
+    return { preprocessedFiles, tempDir };
+}
+
+// 找到最优的帧率
+function findOptimalFrameRate(frameRates) {
+    // 常见的标准帧率
+    const standardRates = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
+    
+    // 如果所有帧率相同，直接返回
+    if (new Set(frameRates).size === 1) {
+        return frameRates[0];
+    }
+    
+    // 找到最接近的标准帧率
+    const avgFrameRate = frameRates.reduce((sum, rate) => sum + rate, 0) / frameRates.length;
+    const closestStandard = standardRates.reduce((prev, curr) => 
+        Math.abs(curr - avgFrameRate) < Math.abs(prev - avgFrameRate) ? curr : prev
+    );
+    
+    return closestStandard;
+}
 
 async function composeVideos(progressCallback, logCallback, outputPath, files, options) {
     const outputDir = path.join(outputPath, 'video_composition');
     await fs.mkdir(outputDir, { recursive: true });
 
     const { composeType, filename, format } = options;
+    let tempDir = null;
+    let actualFiles = files; // 用于合成的实际文件（原文件或预处理后的文件）
     
     try {
         // 生成输出文件名，根据格式添加正确的扩展名
@@ -21,30 +370,70 @@ async function composeVideos(progressCallback, logCallback, outputPath, files, o
         
         progressCallback({ current: 0, total: 1, status: 'processing', file: '正在分析视频信息...' });
         
+        // 步骤1: 分析视频编码信息
+        const videoInfos = await analyzeVideosForComposition(files, logCallback);
+        
         // 获取质量设置和格式配置
         const qualitySettings = getQualitySettings(options.quality);
         const formatSettings = getFormatSettings(format);
         const resolvedResolution = await resolveResolution(files, options.resolution);
         
+        // 步骤2: 判断是否需要预处理
+        const { needsPreprocessing: needsPreprocessingFlag, analysis } = needsPreprocessing(videoInfos, format, resolvedResolution, logCallback);
+        
+        // 步骤3: 如果需要预处理，则进行预处理
+        if (needsPreprocessingFlag) {
+            progressCallback({ current: 0, total: 1, status: 'processing', file: '正在预处理视频...' });
+            
+            const { preprocessedFiles, tempDir: tempDirPath } = await preprocessVideos(
+                videoInfos, 
+                analysis, 
+                outputDir, 
+                progressCallback, 
+                logCallback
+            );
+            
+            tempDir = tempDirPath;
+            actualFiles = preprocessedFiles; // 使用预处理后的文件
+            
+            if (logCallback) {
+                logCallback('success', `🎯 所有视频预处理完成，开始合成...`);
+            }
+        }
+        
         progressCallback({ current: 0, total: 1, status: 'processing', file: '正在合成视频...' });
         
-        // 构建FFmpeg参数
+        // 步骤4: 构建FFmpeg参数并执行合成
         let ffmpegArgs;
         switch (composeType) {
             case 'concat':
-                ffmpegArgs = await buildConcatArgs(files, outputDir, outputFileName, options, qualitySettings, resolvedResolution, formatSettings);
+                ffmpegArgs = await buildConcatArgs(actualFiles, outputDir, outputFileName, options, qualitySettings, resolvedResolution, formatSettings);
                 break;
             case 'sidebyside':
-                ffmpegArgs = await buildSideBySideArgs(files, outputDir, outputFileName, options, qualitySettings, resolvedResolution, formatSettings);
+                ffmpegArgs = await buildSideBySideArgs(actualFiles, outputDir, outputFileName, options, qualitySettings, resolvedResolution, formatSettings);
                 break;
             case 'pip':
-                ffmpegArgs = await buildPipArgs(files, outputDir, outputFileName, options, qualitySettings, resolvedResolution, formatSettings);
+                ffmpegArgs = await buildPipArgs(actualFiles, outputDir, outputFileName, options, qualitySettings, resolvedResolution, formatSettings);
                 break;
             default:
                 throw new Error(`不支持的合成类型: ${composeType}`);
         }
         
         await executeFFmpeg(ffmpegArgs, logCallback);
+        
+        // 步骤5: 清理临时文件
+        if (tempDir) {
+            try {
+                await fs.rmdir(tempDir, { recursive: true });
+                if (logCallback) {
+                    logCallback('info', '🧹 临时文件清理完成');
+                }
+            } catch (cleanupError) {
+                if (logCallback) {
+                    logCallback('warn', `⚠️  临时文件清理失败: ${cleanupError.message}`);
+                }
+            }
+        }
         
         progressCallback({ current: 1, total: 1, status: 'complete', file: outputFileName });
         
@@ -55,6 +444,15 @@ async function composeVideos(progressCallback, logCallback, outputPath, files, o
         return { processed: 1, failed: 0 };
         
     } catch (error) {
+        // 错误时也要清理临时文件
+        if (tempDir) {
+            try {
+                await fs.rmdir(tempDir, { recursive: true });
+            } catch (cleanupError) {
+                // 忽略清理错误
+            }
+        }
+        
         if (logCallback) {
             logCallback('error', `❌ 视频合成失败: ${error.message}`);
         }
@@ -159,7 +557,9 @@ async function buildConcatArgs(files, outputDir, outputFileName, options, qualit
     const concatContent = files.map(file => `file '${file.path.replace(/'/g, "'\"'\"'")}'`).join('\n');
     await fs.writeFile(concatListPath, concatContent);
     
-    let videoFilter = buildVideoFilter(resolution, aspectRatio, background);
+    // 检查是否经过预处理（只要有任何文件经过预处理，所有文件都已统一格式）
+    const hasPreprocessedFiles = files.some(file => file.original !== undefined);
+    let videoFilter = hasPreprocessedFiles ? null : buildVideoFilter(resolution, aspectRatio, background);
     
     const args = [
         '-f', 'concat',

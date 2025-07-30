@@ -22,7 +22,7 @@
                 
                 <div class="file-tabs">
                     <button class="file-tab active" data-type="mp3">🎵 MP3文件</button>
-                    <button class="file-tab" data-type="video">🎬 视频文件</button>
+                    <button class="file-tab" data-type="video">🎬 视频转m3u8</button>
                     <button class="file-tab" data-type="compose">🎭 视频合成和压缩</button>
                 </div>
 
@@ -379,9 +379,14 @@
             </div>
             <div class="progress-bar-container">
                 <div class="progress-bar">
-                    <div class="progress-fill" id="progress-fill"></div>
+                    <div class="progress-fill" id="progress-fill">
+                        <div class="progress-glow"></div>
+                    </div>
                 </div>
-                <div class="progress-text" id="progress-text">准备就绪</div>
+                <div class="progress-info">
+                    <span class="progress-spinner" id="progress-spinner"></span>
+                    <div class="progress-text" id="progress-text">准备就绪</div>
+                </div>
             </div>
             <div class="log-container">
                 <div id="log-content" class="log-content">

@@ -120,6 +120,7 @@ class MediaProcessorApp {
         this.fileCountText = document.getElementById('file-count-text');
         this.progressFill = document.getElementById('progress-fill');
         this.progressText = document.getElementById('progress-text');
+        this.progressSpinner = document.getElementById('progress-spinner');
         this.logContent = document.getElementById('log-content');
         this.ffmpegStatus = document.getElementById('ffmpeg-status');
         
@@ -575,6 +576,9 @@ class MediaProcessorApp {
         this.removeSelectedBtn.disabled = true;
         this.processBtn.textContent = '⏳ 处理中...';
         
+        // 显示处理动画
+        this.progressSpinner.classList.add('visible');
+        
         try {
             if (this.currentFileType === 'mp3') {
                 await this.processMp3Files();
@@ -589,7 +593,12 @@ class MediaProcessorApp {
             this.isProcessing = false;
             this.processBtn.textContent = '🚀 开始处理';
             this.updateFileCount(); // 恢复按钮状态
-            this.updateProgress({ type: this.currentFileType, current: 0, total: 0, status: 'complete' });
+            
+            // 显示完成状态，然后重置
+            this.updateProgress({ type: this.currentFileType, current: 1, total: 1, status: 'complete' });
+            setTimeout(() => {
+                this.updateProgress({ type: this.currentFileType, current: 0, total: 0, status: 'idle' });
+            }, 2000);
         }
     }
 
@@ -664,16 +673,49 @@ class MediaProcessorApp {
     updateProgress(progress) {
         const { type, current, total, file, status } = progress;
         
+        // 清除所有状态类
+        this.progressFill.className = 'progress-fill';
+        this.progressText.className = 'progress-text';
+        this.progressSpinner.className = 'progress-spinner';
+        
         if (total > 0) {
             const percentage = Math.round((current / total) * 100);
             this.progressFill.style.width = `${percentage}%`;
             
             if (status === 'processing') {
+                // 设置处理中的动效
+                this.progressFill.classList.add('processing');
+                this.progressText.classList.add('processing');
+                this.progressSpinner.classList.add('visible');
+                
+                // 更新文字内容
                 this.progressText.textContent = `正在处理 (${current}/${total}): ${file}`;
+                
+            } else if (status === 'preprocessing') {
+                // 设置预处理的动效（黄色主题）
+                this.progressFill.classList.add('preprocessing');
+                this.progressText.classList.add('preprocessing');
+                this.progressSpinner.classList.add('visible', 'preprocessing');
+                
+                // 更新文字内容
+                this.progressText.textContent = `预处理中 (${current}/${total}): ${file}`;
+                
             } else if (status === 'complete') {
+                // 完成状态
+                this.progressText.classList.add('complete');
                 this.progressText.textContent = `处理完成`;
                 this.progressFill.style.width = '100%';
+                
+                // 短暂显示完成动画后隐藏spinner
+                setTimeout(() => {
+                    this.progressSpinner.classList.remove('visible');
+                }, 1000);
             }
+        } else {
+            // 重置状态
+            this.progressFill.style.width = '0%';
+            this.progressText.textContent = '准备就绪';
+            this.progressSpinner.classList.remove('visible');
         }
     }
 
