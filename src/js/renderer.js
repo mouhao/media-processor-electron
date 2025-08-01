@@ -121,6 +121,13 @@ class MediaProcessorApp {
         this.progressFill = document.getElementById('progress-fill');
         this.progressText = document.getElementById('progress-text');
         this.progressSpinner = document.getElementById('progress-spinner');
+        
+        // 进度条动画相关属性
+        this.simulatedProgress = 0;
+        this.progressAnimationId = null;
+        this.isRealProgress = false;
+        this.lastRealProgress = 0;
+        this.progressSpeed = 0.1; // 每100ms增加的百分比
         this.logContent = document.getElementById('log-content');
         this.ffmpegStatus = document.getElementById('ffmpeg-status');
         
@@ -172,7 +179,7 @@ class MediaProcessorApp {
         
         // 监听处理进度
         ipcRenderer.on('processing-progress', (event, progress) => {
-            this.updateProgress(progress);
+            this.handleProgressUpdate(progress);
         });
 
         // 监听处理日志
@@ -576,8 +583,8 @@ class MediaProcessorApp {
         this.removeSelectedBtn.disabled = true;
         this.processBtn.textContent = '⏳ 处理中...';
         
-        // 显示处理动画
-        this.progressSpinner.classList.add('visible');
+        // 启动模拟进度
+        this.startSimulatedProgress('analyzing', '正在分析文件...');
         
         try {
             if (this.currentFileType === 'mp3') {
@@ -670,49 +677,147 @@ class MediaProcessorApp {
         }
     }
 
-    updateProgress(progress) {
-        const { type, current, total, file, status } = progress;
+    // 启动模拟进度动画
+    startSimulatedProgress(status = 'processing', message = '正在处理...') {
+        this.stopSimulatedProgress();
         
-        // 清除所有状态类
+        // 设置不同阶段的速度
+        const speedConfig = {
+            'analyzing': { speed: 0.3, maxProgress: 15, label: '正在分析' },
+            'preprocessing': { speed: 0.2, maxProgress: 85, label: '预处理中' },
+            'processing': { speed: 0.1, maxProgress: 95, label: '正在处理' },
+            'composing': { speed: 0.15, maxProgress: 90, label: '正在合成' }
+        };
+        
+        const config = speedConfig[status] || speedConfig.processing;
+        this.progressSpeed = config.speed;
+        this.maxSimulatedProgress = config.maxProgress;
+        this.currentStatusLabel = config.label;
+        
+        this.isRealProgress = false;
+        
+        // 设置类名和显示
         this.progressFill.className = 'progress-fill';
         this.progressText.className = 'progress-text';
         this.progressSpinner.className = 'progress-spinner';
         
+        if (status === 'preprocessing') {
+            this.progressFill.classList.add('preprocessing');
+            this.progressText.classList.add('preprocessing');
+            this.progressSpinner.classList.add('visible', 'preprocessing');
+        } else {
+            this.progressFill.classList.add('processing');
+            this.progressText.classList.add('processing');
+            this.progressSpinner.classList.add('visible');
+        }
+        
+        this.progressText.textContent = message;
+        
+        // 启动动画
+        this.progressAnimationId = setInterval(() => {
+            this.animateProgress();
+        }, 100);
+    }
+    
+    // 停止模拟进度
+    stopSimulatedProgress() {
+        if (this.progressAnimationId) {
+            clearInterval(this.progressAnimationId);
+            this.progressAnimationId = null;
+        }
+    }
+    
+    // 进度动画函数
+    animateProgress() {
+        if (this.isRealProgress) return;
+        
+        // 缓慢增加进度，但不超过最大值
+        if (this.simulatedProgress < this.maxSimulatedProgress) {
+            // 进度越高速度越慢（模拟真实情况）
+            const slowdownFactor = Math.max(0.1, 1 - (this.simulatedProgress / this.maxSimulatedProgress) * 0.8);
+            this.simulatedProgress += this.progressSpeed * slowdownFactor;
+            
+            this.progressFill.style.width = `${Math.min(this.simulatedProgress, this.maxSimulatedProgress)}%`;
+        }
+    }
+    
+    // 处理进度更新
+    handleProgressUpdate(progress) {
+        const { type, current, total, file, status, currentTime, totalDuration } = progress;
+        
+        // 如果是初始状态更新（analyzing、preprocessing开始、composing开始）
+        if ((total <= 1 && current === 0) || (status === 'analyzing' || (status === 'preprocessing' && !currentTime) || (status === 'composing' && !currentTime))) {
+            const statusMessages = {
+                'analyzing': '正在分析视频信息...',
+                'preprocessing': '正在预处理视频...',
+                'composing': '正在合成视频...'
+            };
+            
+            const message = statusMessages[status] || file || '正在处理...';
+            this.startSimulatedProgress(status, message);
+        } else if (total === 100 && current >= 0) {
+            // FFmpeg真实进度（百分比）
+            this.updateProgress(progress);
+        } else {
+            // 其他进度情况（如文件计数）
+            this.updateProgress(progress);
+        }
+    }
+    
+    updateProgress(progress) {
+        const { type, current, total, file, status } = progress;
+        
         if (total > 0) {
-            const percentage = Math.round((current / total) * 100);
-            this.progressFill.style.width = `${percentage}%`;
+            const realPercentage = Math.round((current / total) * 100);
+            
+            // 切换到真实进度
+            this.isRealProgress = true;
+            this.stopSimulatedProgress();
+            
+            // 确保进度不倒退
+            const finalPercentage = Math.max(realPercentage, this.lastRealProgress);
+            this.lastRealProgress = finalPercentage;
+            
+            this.progressFill.style.width = `${finalPercentage}%`;
+            
+            // 清除所有状态类
+            this.progressFill.className = 'progress-fill';
+            this.progressText.className = 'progress-text';
+            this.progressSpinner.className = 'progress-spinner';
             
             if (status === 'processing') {
-                // 设置处理中的动效
                 this.progressFill.classList.add('processing');
                 this.progressText.classList.add('processing');
                 this.progressSpinner.classList.add('visible');
-                
-                // 更新文字内容
                 this.progressText.textContent = `正在处理 (${current}/${total}): ${file}`;
                 
             } else if (status === 'preprocessing') {
-                // 设置预处理的动效（黄色主题）
                 this.progressFill.classList.add('preprocessing');
                 this.progressText.classList.add('preprocessing');
                 this.progressSpinner.classList.add('visible', 'preprocessing');
-                
-                // 更新文字内容
                 this.progressText.textContent = `预处理中 (${current}/${total}): ${file}`;
                 
             } else if (status === 'complete') {
-                // 完成状态
+                this.stopSimulatedProgress();
                 this.progressText.classList.add('complete');
                 this.progressText.textContent = `处理完成`;
                 this.progressFill.style.width = '100%';
                 
-                // 短暂显示完成动画后隐藏spinner
                 setTimeout(() => {
                     this.progressSpinner.classList.remove('visible');
                 }, 1000);
             }
         } else {
             // 重置状态
+            this.stopSimulatedProgress();
+            this.simulatedProgress = 0;
+            this.lastRealProgress = 0;
+            this.isRealProgress = false;
+            
+            this.progressFill.className = 'progress-fill';
+            this.progressText.className = 'progress-text';
+            this.progressSpinner.className = 'progress-spinner';
+            
             this.progressFill.style.width = '0%';
             this.progressText.textContent = '准备就绪';
             this.progressSpinner.classList.remove('visible');

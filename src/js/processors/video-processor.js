@@ -10,6 +10,11 @@ async function processVideoFiles(progressCallback, logCallback, folderPath, outp
     let processedCount = 0;
     const totalFiles = files.length;
     const results = { processed: 0, failed: 0 };
+    
+    // 初始化进度
+    if (progressCallback) {
+        progressCallback({ current: 0, total: totalFiles, status: 'analyzing', file: '正在分析视频文件...' });
+    }
 
     for (const file of files) {
         progressCallback({ current: processedCount, total: totalFiles, file: file.name, status: 'processing' });

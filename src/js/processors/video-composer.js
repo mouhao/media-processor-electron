@@ -312,7 +312,19 @@ async function preprocessVideos(videoInfos, analysisResult, outputDir, progressC
         args.push(outputPath);
         
         try {
-            await executeFFmpeg(args, logCallback);
+            // 创建预处理进度回调
+            const preprocessProgressCallback = (progress) => {
+                if (progressCallback) {
+                    progressCallback({
+                        current: videosToPreprocess.indexOf(needsPreprocessing),
+                        total: videosToPreprocess.length,
+                        status: 'preprocessing',
+                        file: `预处理: ${videoInfo.fileName} - ${progress.file || ''}`
+                    });
+                }
+            };
+            
+            await executeFFmpeg(args, logCallback, preprocessProgressCallback, videoInfo.duration);
             preprocessedFiles.push({
                 name: outputFileName,
                 path: outputPath,
@@ -368,7 +380,7 @@ async function composeVideos(progressCallback, logCallback, outputPath, files, o
             logCallback('info', `🎞️ 输出格式: ${format.toUpperCase()}`);
         }
         
-        progressCallback({ current: 0, total: 1, status: 'processing', file: '正在分析视频信息...' });
+        progressCallback({ current: 0, total: 1, status: 'analyzing', file: '正在分析视频信息...' });
         
         // 步骤1: 分析视频编码信息
         const videoInfos = await analyzeVideosForComposition(files, logCallback);
@@ -383,7 +395,7 @@ async function composeVideos(progressCallback, logCallback, outputPath, files, o
         
         // 步骤3: 如果需要预处理，则进行预处理
         if (needsPreprocessingFlag) {
-            progressCallback({ current: 0, total: 1, status: 'processing', file: '正在预处理视频...' });
+            progressCallback({ current: 0, total: 1, status: 'preprocessing', file: '正在预处理视频...' });
             
             const { preprocessedFiles, tempDir: tempDirPath } = await preprocessVideos(
                 videoInfos, 
@@ -401,7 +413,7 @@ async function composeVideos(progressCallback, logCallback, outputPath, files, o
             }
         }
         
-        progressCallback({ current: 0, total: 1, status: 'processing', file: '正在合成视频...' });
+        progressCallback({ current: 0, total: 1, status: 'composing', file: '正在合成视频...' });
         
         // 步骤4: 构建FFmpeg参数并执行合成
         let ffmpegArgs;
@@ -419,7 +431,29 @@ async function composeVideos(progressCallback, logCallback, outputPath, files, o
                 throw new Error(`不支持的合成类型: ${composeType}`);
         }
         
-        await executeFFmpeg(ffmpegArgs, logCallback);
+        // 计算合成的总时长
+        let totalDuration = 0;
+        if (composeType === 'concat') {
+            // 连接模式：所有视频时长的总和
+            totalDuration = videoInfos.reduce((sum, video) => sum + video.duration, 0);
+        } else {
+            // 并排或画中画模式：取最长视频的时长
+            totalDuration = Math.max(...videoInfos.map(video => video.duration));
+        }
+        
+        // 创建合成进度回调
+        const composeProgressCallback = (progress) => {
+            if (progressCallback) {
+                progressCallback({
+                    current: progress.current || 0,
+                    total: progress.total || 100,
+                    status: 'processing',
+                    file: progress.file || '正在合成视频...'
+                });
+            }
+        };
+        
+        await executeFFmpeg(ffmpegArgs, logCallback, composeProgressCallback, totalDuration);
         
         // 步骤5: 清理临时文件
         if (tempDir) {
@@ -478,9 +512,9 @@ function getQualitySettings(qualityOption) {
     // 预设质量配置
     const preset = qualityOption.preset || qualityOption;
     const qualityMap = {
-        'high': { crf: 18, preset: 'slower', audioBitrate: '192k' },
-        'medium': { crf: 23, preset: 'medium', audioBitrate: '128k' },
-        'fast': { crf: 28, preset: 'fast', audioBitrate: '96k' }
+        'high': { crf: 18, preset: 'slower', audioBitrate: '192k', videoProfile: 'main' },
+        'medium': { crf: 23, preset: 'medium', audioBitrate: '128k', videoProfile: 'main' },
+        'fast': { crf: 28, preset: 'fast', audioBitrate: '96k', videoProfile: 'main' }
     };
     return { isCustom: false, ...qualityMap[preset] || qualityMap['medium'] };
 }
@@ -594,6 +628,10 @@ async function buildConcatArgs(files, outputDir, outputFileName, options, qualit
         if (formatSettings.videoCodec === 'libx264') {
             args.push('-crf', qualitySettings.crf.toString());
             args.push('-preset', qualitySettings.preset);
+            // 添加默认profile设置
+            if (qualitySettings.videoProfile) {
+                args.push('-profile:v', qualitySettings.videoProfile);
+            }
         } else if (formatSettings.videoCodec === 'wmv2') {
             const bitrateMap = { high: '5000k', medium: '2000k', fast: '1000k' };
             args.push('-b:v', bitrateMap[qualitySettings.preset] || '2000k');
@@ -711,6 +749,10 @@ async function buildSideBySideArgs(files, outputDir, outputFileName, options, qu
         if (formatSettings.videoCodec === 'libx264') {
             args.push('-crf', qualitySettings.crf.toString());
             args.push('-preset', qualitySettings.preset);
+            // 添加默认profile设置
+            if (qualitySettings.videoProfile) {
+                args.push('-profile:v', qualitySettings.videoProfile);
+            }
         } else if (formatSettings.videoCodec === 'wmv2') {
             const bitrateMap = { high: '5000k', medium: '2000k', fast: '1000k' };
             args.push('-b:v', bitrateMap[qualitySettings.preset] || '2000k');
@@ -808,6 +850,10 @@ async function buildPipArgs(files, outputDir, outputFileName, options, qualitySe
         if (formatSettings.videoCodec === 'libx264') {
             args.push('-crf', qualitySettings.crf.toString());
             args.push('-preset', qualitySettings.preset);
+            // 添加默认profile设置
+            if (qualitySettings.videoProfile) {
+                args.push('-profile:v', qualitySettings.videoProfile);
+            }
         } else if (formatSettings.videoCodec === 'wmv2') {
             const bitrateMap = { high: '5000k', medium: '2000k', fast: '1000k' };
             args.push('-b:v', bitrateMap[qualitySettings.preset] || '2000k');
@@ -880,7 +926,7 @@ function getPipPosition(mainWidth, mainHeight, pipDimensions, position) {
     return positionMap[position] || positionMap['top-right'];
 }
 
-function executeFFmpeg(args, logCallback) {
+function executeFFmpeg(args, logCallback, progressCallback = null, totalDuration = null) {
     return new Promise((resolve, reject) => {
         if (!ffmpegPath) {
             return reject(new Error('FFmpeg not found. Please check your installation and configuration.'));
@@ -896,12 +942,64 @@ function executeFFmpeg(args, logCallback) {
         const ffmpeg = spawn(ffmpegPath, args);
         
         let stderr = '';
+        let lastProgressTime = 0;
+        
         ffmpeg.stderr.on('data', (data) => { 
-            stderr += data.toString(); 
+            const chunk = data.toString();
+            stderr += chunk;
+            
+            // 解析FFmpeg进度输出
+            if (progressCallback && totalDuration && totalDuration > 0) {
+                // 匹配 time=HH:MM:SS.ss 或 time=SS.ss 格式
+                const timeMatch = chunk.match(/time=([\d\.:]+)/);
+                if (timeMatch) {
+                    const timeStr = timeMatch[1];
+                    let currentTime = 0;
+                    
+                    // 解析时间格式
+                    if (timeStr.includes(':')) {
+                        // HH:MM:SS.ss 格式
+                        const timeParts = timeStr.split(':');
+                        if (timeParts.length === 3) {
+                            const hours = parseFloat(timeParts[0]) || 0;
+                            const minutes = parseFloat(timeParts[1]) || 0;
+                            const seconds = parseFloat(timeParts[2]) || 0;
+                            currentTime = hours * 3600 + minutes * 60 + seconds;
+                        }
+                    } else {
+                        // 直接是秒数
+                        currentTime = parseFloat(timeStr) || 0;
+                    }
+                    
+                    // 计算进度百分比
+                    if (currentTime > lastProgressTime) {
+                        lastProgressTime = currentTime;
+                        const progressPercent = Math.min((currentTime / totalDuration) * 100, 100);
+                        
+                        // 回调真实进度更新
+                        progressCallback({
+                            current: Math.round(progressPercent),
+                            total: 100,
+                            currentTime: currentTime,
+                            totalDuration: totalDuration,
+                            status: 'processing',
+                            file: `处理中... ${Math.round(progressPercent)}% (${formatTime(currentTime)}/${formatTime(totalDuration)})`
+                        });
+                    }
+                }
+            }
         });
         
         ffmpeg.on('close', (code) => {
             if (code === 0) {
+                // 完成时显示100%进度
+                if (progressCallback) {
+                    progressCallback({
+                        current: 100,
+                        total: 100,
+                        status: 'complete'
+                    });
+                }
                 resolve();
             } else {
                 reject(new Error(`FFmpeg_Error: ${stderr}`));
@@ -910,6 +1008,21 @@ function executeFFmpeg(args, logCallback) {
         
         ffmpeg.on('error', (err) => reject(err));
     });
+}
+
+// 格式化时间显示
+function formatTime(seconds) {
+    if (!seconds || seconds < 0) return '00:00';
+    
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    
+    if (hours > 0) {
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    } else {
+        return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
 }
 
 function getComposeTypeName(type) {

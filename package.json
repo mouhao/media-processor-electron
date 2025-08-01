@@ -52,11 +52,19 @@
       {
         "from": "bin",
         "to": "bin",
-        "filter": [
-          "**/*"
-        ]
+        "filter": ["**/*"]
       }
     ],
+    "asarUnpack": [
+      "bin/**/*"
+    ],
+    "nsis": {
+      "allowToChangeInstallationDirectory": true,
+      "oneClick": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "deleteAppDataOnUninstall": true
+    },
     "mac": {
       "icon": "src/assets/icons/media.ico",
       "category": "public.app-category.utilities",
@@ -74,13 +82,14 @@
           "target": "nsis",
           "arch": ["x64"]
         }
+      ],
+      "extraResources": [
+        {
+          "from": "bin/win",
+          "to": "bin/win",
+          "filter": ["**/*"]
+        }
       ]
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
     }
   },
   "engines": {

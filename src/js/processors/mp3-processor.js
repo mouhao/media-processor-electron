@@ -10,6 +10,11 @@ async function processMp3Files(progressCallback, logCallback, folderPath, output
     const results = [];
     let processedCount = 0;
     const totalFiles = files.length;
+    
+    // 初始化进度
+    if (progressCallback) {
+        progressCallback({ current: 0, total: totalFiles, status: 'analyzing', file: '正在分析MP3文件...' });
+    }
 
     for (const file of files) {
         progressCallback({ current: processedCount, total: totalFiles, file: file.name, status: 'processing' });
