@@ -7,6 +7,7 @@ const { checkFfmpeg, scanMediaFiles, getFileDetails } = require('./src/js/proces
 const { processMp3Files } = require('./src/js/processors/mp3-processor.js');
 const { processVideoFiles } = require('./src/js/processors/video-processor.js');
 const { composeVideos } = require('./src/js/processors/video-composer.js');
+const { processIntroOutro } = require('./src/js/processors/intro-outro-processor.js');
 
 // 保持窗口对象的全局引用
 let mainWindow;
@@ -177,6 +178,61 @@ ipcMain.handle('compose-videos', async (event, { outputPath, files, options }) =
     return { success: true, result };
   } catch (error) {
     console.error('合成视频时出错:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 片头文件选择
+ipcMain.handle('select-intro-file', async () => {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: [
+        { name: '视频文件', extensions: ['mp4', 'avi', 'mov', 'mkv', 'wmv', 'flv', 'm4v'] },
+        { name: '所有文件', extensions: ['*'] }
+      ],
+      title: '选择片头视频文件'
+    });
+
+    if (!result.canceled && result.filePaths.length > 0) {
+      return { success: true, filePath: result.filePaths[0] };
+    }
+    return { success: false, error: '用户取消选择' };
+  } catch (error) {
+    console.error('选择片头文件时出错:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 片尾文件选择
+ipcMain.handle('select-outro-file', async () => {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: [
+        { name: '视频文件', extensions: ['mp4', 'avi', 'mov', 'mkv', 'wmv', 'flv', 'm4v'] },
+        { name: '所有文件', extensions: ['*'] }
+      ],
+      title: '选择片尾视频文件'
+    });
+
+    if (!result.canceled && result.filePaths.length > 0) {
+      return { success: true, filePath: result.filePaths[0] };
+    }
+    return { success: false, error: '用户取消选择' };
+  } catch (error) {
+    console.error('选择片尾文件时出错:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 视频片头片尾处理
+ipcMain.handle('process-intro-outro', async (event, { outputPath, files, options }) => {
+  try {
+    await processIntroOutro(progressCallback, logCallback, outputPath, files, options);
+    return { success: true };
+  } catch (error) {
+    console.error('处理视频片头片尾时出错:', error);
     return { success: false, error: error.message };
   }
 }); 

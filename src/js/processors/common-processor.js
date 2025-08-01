@@ -346,12 +346,125 @@ function formatDuration(seconds) {
 
 const { ffmpegPath, ffprobePath } = getFfmpegPaths();
 
+/**
+ * 生成不重复的输出文件名，如果目标文件已存在，自动添加后缀
+ * @param {string} targetPath - 目标文件路径
+ * @param {Function} logCallback - 日志回调函数
+ * @returns {Promise<string>} - 返回不重复的文件路径
+ */
+async function generateUniqueFilename(targetPath, logCallback = null) {
+    try {
+        // 检查文件是否存在
+        await fs.access(targetPath);
+        
+        // 文件存在，需要生成新名称
+        const dir = path.dirname(targetPath);
+        const ext = path.extname(targetPath);
+        const nameWithoutExt = path.basename(targetPath, ext);
+        
+        let counter = 1;
+        let newPath;
+        
+        do {
+            const newName = `${nameWithoutExt}_${counter}${ext}`;
+            newPath = path.join(dir, newName);
+            
+            try {
+                await fs.access(newPath);
+                counter++; // 文件存在，继续尝试下一个
+            } catch {
+                // 文件不存在，找到可用的名称
+                break;
+            }
+        } while (counter < 1000); // 防止无限循环
+        
+        if (counter >= 1000) {
+            throw new Error('无法生成唯一文件名，请检查输出目录');
+        }
+        
+        if (logCallback) {
+            logCallback('info', `📝 检测到重名文件，重命名为: ${path.basename(newPath)}`);
+        }
+        
+        return newPath;
+        
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            // 文件不存在，可以使用原名称
+            return targetPath;
+        }
+        throw error;
+    }
+}
+
+/**
+ * 获取跨平台硬件加速参数
+ */
+function getHardwareAccelArgs() {
+    if (process.platform === 'darwin') {
+        // macOS: 使用VideoToolbox
+        return ['-hwaccel', 'videotoolbox'];
+    } else if (process.platform === 'win32') {
+        // Windows: 优先使用D3D11VA，降级到DXVA2
+        return ['-hwaccel', 'd3d11va', '-hwaccel_output_format', 'd3d11'];
+    } else {
+        // Linux: 尝试VAAPI硬件加速
+        return ['-hwaccel', 'vaapi', '-hwaccel_output_format', 'vaapi'];
+    }
+}
+
+/**
+ * 获取跨平台最佳硬件编码器
+ */
+function getBestHardwareEncoder(codec = 'h264', logCallback = null) {
+    if (process.platform === 'darwin') {
+        // macOS: 使用VideoToolbox
+        const encoder = codec === 'hevc' ? 'hevc_videotoolbox' : 'h264_videotoolbox';
+        if (logCallback) {
+            logCallback('info', `🍎 macOS使用VideoToolbox硬件编码: ${encoder}`);
+        }
+        return encoder;
+    } else if (process.platform === 'win32') {
+        // Windows: 智能选择 NVENC > AMF > 软件编码
+        // 注意：实际检测需要运行FFmpeg命令，这里使用软件编码作为兼容方案
+        const softwareEncoder = codec === 'hevc' ? 'libx265' : 'libx264';
+        if (logCallback) {
+            logCallback('info', `🪟 Windows使用软件编码 (兼容性): ${softwareEncoder}`);
+        }
+        return softwareEncoder;
+    } else {
+        // Linux: 使用软件编码
+        const encoder = codec === 'hevc' ? 'libx265' : 'libx264';
+        if (logCallback) {
+            logCallback('info', `🐧 Linux使用软件编码: ${encoder}`);
+        }
+        return encoder;
+    }
+}
+
+/**
+ * 获取硬件加速类型显示名称
+ */
+function getAccelerationType() {
+    if (process.platform === 'darwin') {
+        return 'VideoToolbox';
+    } else if (process.platform === 'win32') {
+        return 'D3D11VA';
+    } else {
+        return 'VAAPI/软件';
+    }
+}
+
 module.exports = {
     reportProgress,
     checkFfmpeg,
     scanMediaFiles,
     getFileDetails,
     getMp3Bitrate,
+    generateUniqueFilename,
+    getHardwareAccelArgs,
+    getBestHardwareEncoder,
+    getAccelerationType,
     ffmpegPath,
     ffprobePath,
 }; 

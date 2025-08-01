@@ -1,7 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { spawn } = require('child_process');
-const { getMp3Bitrate, ffmpegPath } = require('./common-processor');
+const { getMp3Bitrate, ffmpegPath, generateUniqueFilename } = require('./common-processor');
 
 async function processMp3Files(progressCallback, logCallback, folderPath, outputPath, files, options) {
     const { bitrate = 64, threshold = 64, keepStructure = true, forceProcess = false, encodingMode = 'abr' } = options;
@@ -32,13 +32,16 @@ async function processMp3Files(progressCallback, logCallback, folderPath, output
                     logCallback('info', `跳过文件 ${file.name}: 当前比特率 ${currentBitrate}kbps <= 阈值 ${threshold}kbps`);
                 }
             } else {
-                let outputFilePath;
-                if (keepStructure) {
-                    const relativePath = path.relative(folderPath, file.path);
-                    outputFilePath = path.join(outputPath, relativePath);
-                    await fs.mkdir(path.dirname(outputFilePath), { recursive: true });
-                } else {
-                    outputFilePath = path.join(outputPath, file.name);
+                // 为每个MP3文件创建独立的子文件夹
+                const baseName = path.basename(file.name, path.extname(file.name));
+                const fileOutputDir = path.join(outputPath, `压缩音频_${baseName}`);
+                await fs.mkdir(fileOutputDir, { recursive: true });
+                
+                // 使用原文件名作为输出文件名
+                const outputFilePath = path.join(fileOutputDir, file.name);
+                
+                if (logCallback) {
+                    logCallback('info', `📁 输出目录: ${path.basename(fileOutputDir)}`);
                 }
 
                 await compressMp3(file.path, outputFilePath, bitrate, encodingMode, logCallback);

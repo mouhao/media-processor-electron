@@ -1,9 +1,10 @@
 const { ipcRenderer } = require('electron');
+const path = require('path');
 
 class MediaProcessorApp {
     constructor() {
         this.currentFolder = null;
-        this.mediaFiles = { mp3: [], video: [], compose: [] };
+        this.mediaFiles = { mp3: [], video: [], compose: [], 'intro-outro': [] };
         this.selectedFiles = [];
         this.currentFileType = 'mp3';
         this.isProcessing = false;
@@ -159,6 +160,18 @@ class MediaProcessorApp {
         this.multiVideoSettings = document.getElementById('multi-video-settings');
         this.pipPositionGroup = document.getElementById('pip-position');
         this.pipSizeGroup = document.getElementById('pip-size');
+        
+        // 片头片尾处理设置元素
+        this.replaceIntroRadios = document.querySelectorAll('input[name="replace-intro"]');
+        this.replaceOutroRadios = document.querySelectorAll('input[name="replace-outro"]');
+        this.introTrimGroup = document.getElementById('intro-trim-group');
+        this.outroTrimGroup = document.getElementById('outro-trim-group');
+        this.introFileGroup = document.getElementById('intro-file-group');
+        this.outroFileGroup = document.getElementById('outro-file-group');
+        this.introFileInput = document.getElementById('intro-file');
+        this.outroFileInput = document.getElementById('outro-file');
+        this.selectIntroBtn = document.getElementById('select-intro-btn');
+        this.selectOutroBtn = document.getElementById('select-outro-btn');
     }
 
     bindEvents() {
@@ -227,6 +240,47 @@ class MediaProcessorApp {
             });
         }
 
+        // 监听片头替换选项变化
+        this.replaceIntroRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                this.updateIntroSettings(e.target.value === 'yes');
+            });
+        });
+
+        // 监听片尾替换选项变化  
+        this.replaceOutroRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                this.updateOutroSettings(e.target.value === 'yes');
+            });
+        });
+
+        // 片头文件选择
+        if (this.selectIntroBtn) {
+            this.selectIntroBtn.addEventListener('click', () => this.selectIntroFile());
+        }
+
+        // 片尾文件选择
+        if (this.selectOutroBtn) {
+            this.selectOutroBtn.addEventListener('click', () => this.selectOutroFile());
+        }
+
+        // 监听片头片尾时长输入变化
+        const introTrimInput = document.getElementById('intro-trim-seconds');
+        const outroTrimInput = document.getElementById('outro-trim-seconds');
+        const qualitySelect = document.getElementById('intro-outro-quality');
+        
+        if (introTrimInput) {
+            introTrimInput.addEventListener('input', () => this.updateTrimSummary());
+        }
+        
+        if (outroTrimInput) {
+            outroTrimInput.addEventListener('input', () => this.updateTrimSummary());
+        }
+        
+        if (qualitySelect) {
+            qualitySelect.addEventListener('change', () => this.updateTrimSummary());
+        }
+
         // 同步表头和文件列表的水平滚动
         this.fileList.addEventListener('scroll', () => {
             const header = document.querySelector('.file-list-header');
@@ -234,6 +288,11 @@ class MediaProcessorApp {
                 header.scrollLeft = this.fileList.scrollLeft;
             }
         });
+        
+        // 初始化裁剪汇总显示
+        setTimeout(() => {
+            this.updateTrimSummary();
+        }, 100);
     }
 
     async checkFFmpegStatus() {
@@ -335,7 +394,15 @@ class MediaProcessorApp {
             }
         }
         
-        // 控制拖拽提示和序号列的显示
+        // 如果是片头片尾处理标签页，初始化裁剪汇总显示
+        if (type === 'intro-outro') {
+            // 延迟调用以确保DOM元素已经加载
+            setTimeout(() => {
+                this.updateTrimSummary();
+            }, 100);
+        }
+        
+        // 控制拖拽提示显示（只在合成模式下显示）
         if (this.composeTip) {
             if (type === 'compose') {
                 this.composeTip.style.display = 'block';
@@ -344,7 +411,7 @@ class MediaProcessorApp {
             }
         }
         
-        // 控制序号列显示
+        // 控制序号列显示（只在合成模式下显示）
         const headerOrder = document.querySelector('.header-order');
         if (headerOrder) {
             if (type === 'compose') {
@@ -355,7 +422,9 @@ class MediaProcessorApp {
         }
         
         // 检查是否需要获取详细信息
-        const files = this.mediaFiles[type] || [];
+        const files = (type === 'compose' || type === 'intro-outro') ? 
+            this.mediaFiles.video : 
+            this.mediaFiles[type] || [];
         const needsDetails = files.some(file => 
             !file.info || file.info === '点击处理时获取详情'
         );
@@ -371,6 +440,8 @@ class MediaProcessorApp {
             this.configTitle.textContent = '视频处理配置';
         } else if (type === 'compose') {
             this.configTitle.textContent = '视频合成配置';
+        } else if (type === 'intro-outro') {
+            this.configTitle.textContent = '视频片头片尾处理配置';
         }
         
         // 更新配置内容
@@ -384,8 +455,8 @@ class MediaProcessorApp {
     }
 
     renderFileList(loadDetails = false) {
-        // 合成视频模式使用video文件列表
-        const files = this.currentFileType === 'compose' ? 
+        // 合成视频模式和片头片尾处理模式使用video文件列表
+        const files = (this.currentFileType === 'compose' || this.currentFileType === 'intro-outro') ? 
             this.mediaFiles.video : 
             this.mediaFiles[this.currentFileType] || [];
         this.selectedFiles = [];
@@ -483,8 +554,8 @@ class MediaProcessorApp {
         // 延迟1秒开始获取，避免界面卡顿
         await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // 确定实际的文件类型：合成视频模式使用video类型
-        const actualFileType = this.currentFileType === 'compose' ? 'video' : this.currentFileType;
+        // 确定实际的文件类型：合成视频模式和片头片尾处理模式使用video类型
+        const actualFileType = (this.currentFileType === 'compose' || this.currentFileType === 'intro-outro') ? 'video' : this.currentFileType;
         
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
@@ -600,8 +671,8 @@ class MediaProcessorApp {
     }
 
     selectAllFiles(checked) {
-        // 确定实际的文件类型：合成视频模式使用video类型
-        const actualFileType = this.currentFileType === 'compose' ? 'video' : this.currentFileType;
+        // 确定实际的文件类型：合成视频模式和片头片尾处理模式使用video类型
+        const actualFileType = (this.currentFileType === 'compose' || this.currentFileType === 'intro-outro') ? 'video' : this.currentFileType;
         const files = this.mediaFiles[actualFileType] || [];
         const checkboxes = this.fileList.querySelectorAll('input[type="checkbox"]');
         
@@ -618,8 +689,8 @@ class MediaProcessorApp {
         
         const removedCount = this.selectedFiles.length;
         const fileType = this.currentFileType;
-        // 确定实际的文件类型：合成视频模式使用video类型
-        const actualFileType = this.currentFileType === 'compose' ? 'video' : this.currentFileType;
+        // 确定实际的文件类型：合成视频模式和片头片尾处理模式使用video类型
+        const actualFileType = (this.currentFileType === 'compose' || this.currentFileType === 'intro-outro') ? 'video' : this.currentFileType;
         
         // 从mediaFiles中移除选中的文件
         this.selectedFiles.forEach(selectedFile => {
@@ -636,13 +707,13 @@ class MediaProcessorApp {
         this.renderFileList(false);
         
         // 记录日志
-        const fileTypeName = fileType === 'mp3' ? 'MP3' : (fileType === 'compose' ? '视频' : '视频');
+        const fileTypeName = fileType === 'mp3' ? 'MP3' : (fileType === 'compose' || fileType === 'intro-outro' ? '视频' : '视频');
         this.addLog('info', `🗑️ 已移除 ${removedCount} 个${fileTypeName}文件`);
     }
 
     updateSelectAllCheckbox() {
-        // 确定实际的文件类型：合成视频模式使用video类型
-        const actualFileType = this.currentFileType === 'compose' ? 'video' : this.currentFileType;
+        // 确定实际的文件类型：合成视频模式和片头片尾处理模式使用video类型
+        const actualFileType = (this.currentFileType === 'compose' || this.currentFileType === 'intro-outro') ? 'video' : this.currentFileType;
         const files = this.mediaFiles[actualFileType] || [];
         const checkedCount = this.selectedFiles.length;
         
@@ -660,8 +731,8 @@ class MediaProcessorApp {
 
     updateFileCount() {
         const selectedCount = this.selectedFiles.length;
-        // 确定实际的文件类型：合成视频模式使用video类型
-        const actualFileType = this.currentFileType === 'compose' ? 'video' : this.currentFileType;
+        // 确定实际的文件类型：合成视频模式和片头片尾处理模式使用video类型
+        const actualFileType = (this.currentFileType === 'compose' || this.currentFileType === 'intro-outro') ? 'video' : this.currentFileType;
         const totalCount = this.mediaFiles[actualFileType]?.length || 0;
         
         if (selectedCount === 0) {
@@ -699,6 +770,8 @@ class MediaProcessorApp {
                 await this.processVideoFiles();
             } else if (this.currentFileType === 'compose') {
                 await this.composeVideos();
+            } else if (this.currentFileType === 'intro-outro') {
+                await this.processIntroOutroVideos();
             }
         } catch (error) {
             this.addLog('error', `处理失败: ${error.message}`);
@@ -1000,7 +1073,6 @@ class MediaProcessorApp {
         // 获取用户设置的选项
         const options = {
             composeType: composeType,
-            filename: document.getElementById('compose-filename').value || '合成视频',
             format: document.getElementById('compose-format').value,
             quality: qualitySettings,
             resolution: resolution,
@@ -1070,6 +1142,72 @@ class MediaProcessorApp {
         }
     }
 
+    async processIntroOutroVideos() {
+        // 获取片头片尾处理设置
+        const replaceIntro = document.querySelector('input[name="replace-intro"]:checked').value === 'yes';
+        const replaceOutro = document.querySelector('input[name="replace-outro"]:checked').value === 'yes';
+        const introTrimSeconds = parseFloat(document.getElementById('intro-trim-seconds').value) || 0;
+        const outroTrimSeconds = parseFloat(document.getElementById('outro-trim-seconds').value) || 0;
+        const introFile = document.getElementById('intro-file').value;
+        const outroFile = document.getElementById('outro-file').value;
+        // 移除自定义文件名，将在处理器中自动生成文件夹名
+        const quality = document.getElementById('intro-outro-quality').value || 'medium';
+
+        // 验证设置
+        if (replaceIntro && !introFile) {
+            this.addLog('error', '❌ 请选择片头视频文件');
+            return;
+        }
+        
+        if (replaceOutro && !outroFile) {
+            this.addLog('error', '❌ 请选择片尾视频文件');
+            return;
+        }
+
+        if (!replaceIntro && !replaceOutro && introTrimSeconds === 0 && outroTrimSeconds === 0) {
+            this.addLog('error', '❌ 请至少启用一种处理选项（替换片头/片尾或裁剪时长）');
+            return;
+        }
+
+        const options = {
+            replaceIntro,
+            replaceOutro,
+            introFile,
+            outroFile,
+            introTrimSeconds,
+            outroTrimSeconds,
+            quality
+        };
+
+        this.addLog('info', `🎬 开始处理 ${this.selectedFiles.length} 个视频文件`);
+        this.addLog('info', `⚙️ 处理选项: 替换片头=${replaceIntro}, 替换片尾=${replaceOutro}, 质量=${quality}`);
+        
+        if (introTrimSeconds > 0) {
+            this.addLog('info', `✂️ 裁剪片头: ${introTrimSeconds}秒`);
+        }
+        if (outroTrimSeconds > 0) {
+            this.addLog('info', `✂️ 裁剪片尾: ${outroTrimSeconds}秒`);
+        }
+        if (replaceIntro && introFile) {
+            this.addLog('info', `🎬 新片头: ${path.basename(introFile)}`);
+        }
+        if (replaceOutro && outroFile) {
+            this.addLog('info', `🎭 新片尾: ${path.basename(outroFile)}`);
+        }
+
+        const result = await ipcRenderer.invoke('process-intro-outro', {
+            outputPath: this.outputFolder.value,
+            files: this.selectedFiles,
+            options
+        });
+
+        if (result.success) {
+            this.addLog('success', `✅ 视频片头片尾处理完成`);
+        } else {
+            this.addLog('error', `视频片头片尾处理失败: ${result.error}`);
+        }
+    }
+
     getComposeTypeName(type) {
         const typeNames = {
             'concat': '顺序拼接',
@@ -1083,7 +1221,8 @@ class MediaProcessorApp {
         const typeNames = {
             'mp3': 'MP3',
             'video': '视频',
-            'compose': '视频'
+            'compose': '视频',
+            'intro-outro': '视频'
         };
         return typeNames[this.currentFileType] || '文件';
     }
@@ -1252,10 +1391,13 @@ class MediaProcessorApp {
     }
     
     reorderFiles(fromIndex, toIndex) {
+        // 只有合成模式支持拖拽排序
+        if (this.currentFileType !== 'compose') {
+            return;
+        }
+        
         // 获取当前文件数组
-        const files = this.currentFileType === 'compose' ? 
-            this.mediaFiles.video : 
-            this.mediaFiles[this.currentFileType] || [];
+        const files = this.mediaFiles.video || [];
         
         if (fromIndex < 0 || fromIndex >= files.length || 
             toIndex < 0 || toIndex > files.length || 
@@ -1299,6 +1441,94 @@ class MediaProcessorApp {
                 orderElement.style.transform = 'scale(1)';
             }, 200);
         });
+    }
+
+    // 更新片头设置显示状态
+    updateIntroSettings(replaceIntro) {
+        if (this.introFileGroup) {
+            this.introFileGroup.style.display = replaceIntro ? '' : 'none';
+        }
+    }
+
+    // 更新片尾设置显示状态
+    updateOutroSettings(replaceOutro) {
+        if (this.outroFileGroup) {
+            this.outroFileGroup.style.display = replaceOutro ? '' : 'none';
+        }
+    }
+
+    // 选择片头文件
+    async selectIntroFile() {
+        try {
+            const result = await ipcRenderer.invoke('select-intro-file');
+            if (result.success && result.filePath) {
+                this.introFileInput.value = result.filePath;
+            }
+        } catch (error) {
+            console.error('选择片头文件失败:', error);
+            this.addLog('error', '选择片头文件失败: ' + error.message);
+        }
+    }
+
+    // 选择片尾文件
+    async selectOutroFile() {
+        try {
+            const result = await ipcRenderer.invoke('select-outro-file');
+            if (result.success && result.filePath) {
+                this.outroFileInput.value = result.filePath;
+            }
+        } catch (error) {
+            console.error('选择片尾文件失败:', error);
+            this.addLog('error', '选择片尾文件失败: ' + error.message);
+        }
+    }
+
+    // 更新裁剪汇总显示
+    updateTrimSummary() {
+        const introTrimInput = document.getElementById('intro-trim-seconds');
+        const outroTrimInput = document.getElementById('outro-trim-seconds');
+        const introTrimDisplay = document.getElementById('intro-trim-display');
+        const outroTrimDisplay = document.getElementById('outro-trim-display');
+        const totalTrimDisplay = document.getElementById('total-trim-display');
+        const qualitySelect = document.getElementById('intro-outro-quality');
+        const precisionWarning = document.getElementById('precision-warning');
+        
+        if (!introTrimInput || !outroTrimInput || !introTrimDisplay || !outroTrimDisplay || !totalTrimDisplay) {
+            return;
+        }
+        
+        const introTrim = parseFloat(introTrimInput.value) || 0;
+        const outroTrim = parseFloat(outroTrimInput.value) || 0;
+        const totalTrim = introTrim + outroTrim;
+        const quality = qualitySelect ? qualitySelect.value : 'copy';
+        
+        // 更新显示
+        introTrimDisplay.textContent = introTrim > 0 ? `${introTrim}秒` : '0秒';
+        outroTrimDisplay.textContent = outroTrim > 0 ? `${outroTrim}秒` : '0秒';
+        totalTrimDisplay.textContent = totalTrim > 0 ? `${totalTrim}秒` : '0秒';
+        
+        // 如果总计大于0，高亮显示
+        const totalItem = totalTrimDisplay.closest('.summary-item');
+        if (totalItem) {
+            if (totalTrim > 0) {
+                totalItem.style.backgroundColor = '#fff3cd';
+                totalItem.style.borderColor = '#ffeaa7';
+                totalTrimDisplay.style.color = '#856404';
+            } else {
+                totalItem.style.backgroundColor = '';
+                totalItem.style.borderColor = '';
+                totalTrimDisplay.style.color = '';
+            }
+        }
+        
+        // 显示/隐藏精度警告（只有快速模式需要警告）
+        if (precisionWarning) {
+            if (totalTrim > 0 && quality === 'copy') {
+                precisionWarning.style.display = 'flex';
+            } else {
+                precisionWarning.style.display = 'none';
+            }
+        }
     }
 
     formatFileSize(bytes) {

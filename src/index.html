@@ -21,9 +21,10 @@
                 </div>
                 
                 <div class="file-tabs">
-                    <button class="file-tab active" data-type="mp3">🎵 MP3文件</button>
+                    <button class="file-tab active" data-type="mp3">🎵 MP3压缩</button>
                     <button class="file-tab" data-type="video">🎬 视频转m3u8</button>
                     <button class="file-tab" data-type="compose">🎭 视频合成和压缩</button>
+                    <button class="file-tab" data-type="intro-outro">🎬 视频片头片尾处理</button>
                 </div>
                 
                 <div class="compose-tip" style="display: none;">
@@ -163,11 +164,7 @@
                         <span class="help-text">顺序拼接：视频按选择顺序依次播放</span>
                     </div>
                     
-                    <div class="setting-group">
-                        <label for="compose-filename">输出文件名：</label>
-                        <input type="text" id="compose-filename" placeholder="合成视频" value="合成视频">
-                        <span class="help-text">不需要输入扩展名，会根据格式自动添加</span>
-                    </div>
+
 
                     <div class="setting-group">
                         <label for="compose-format">输出格式：</label>
@@ -358,6 +355,118 @@
                                 <option value="veryslow">Veryslow（最慢最高质量）</option>
                             </select>
                             <span class="help-text">速度越慢，压缩效率越高，文件越小</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 视频片头片尾处理设置 -->
+                <div id="intro-outro-settings" class="tab-content">
+                    <h4>视频片头片尾处理设置</h4>
+                    
+                    <!-- 片头处理设置 -->
+                    <div class="setting-group">
+                        <h5>🎬 片头处理</h5>
+                        <div class="setting-group inline">
+                            <label>替换片头：</label>
+                            <div class="radio-group">
+                                <label><input type="radio" name="replace-intro" value="no" checked> 否</label>
+                                <label><input type="radio" name="replace-intro" value="yes"> 是</label>
+                            </div>
+                        </div>
+                        <div class="setting-group" id="intro-file-group" style="display: none;">
+                          <label for="intro-file">新片头视频文件：</label>
+                          <div class="file-input-group">
+                              <input type="text" id="intro-file" placeholder="选择片头视频文件" readonly>
+                              <button id="select-intro-btn" class="btn btn-secondary">选择文件</button>
+                          </div>
+                          <span class="help-text">支持 MP4、AVI、MOV 等常见视频格式</span>
+                      </div>
+                        
+                        <div class="setting-group" id="intro-trim-group">
+                            <label for="intro-trim-seconds">去除片头时长（秒）：</label>
+                            <div class="input-with-unit">
+                                <input type="number" id="intro-trim-seconds" min="0" max="300" value="0" step="0.01">
+                                <span class="unit">秒</span>
+                            </div>
+                            <span class="help-text">从视频开头裁剪掉指定秒数（支持小数，如1.23秒）</span>
+                        </div>
+                        
+                        
+                    </div>
+                    
+                    <!-- 片尾处理设置 -->
+                    <div class="setting-group">
+                        <h5>🎭 片尾处理</h5>
+                        <div class="setting-group inline">
+                            <label>替换片尾：</label>
+                            <div class="radio-group">
+                                <label><input type="radio" name="replace-outro" value="no" checked> 否</label>
+                                <label><input type="radio" name="replace-outro" value="yes"> 是</label>
+                            </div>
+                        </div>
+                        <div class="setting-group" id="outro-file-group" style="display: none;">
+                          <label for="outro-file">新片尾视频文件：</label>
+                          <div class="file-input-group">
+                              <input type="text" id="outro-file" placeholder="选择片尾视频文件" readonly>
+                              <button id="select-outro-btn" class="btn btn-secondary">选择文件</button>
+                          </div>
+                          <span class="help-text">支持 MP4、AVI、MOV 等常见视频格式</span>
+                      </div>
+                        
+                        <div class="setting-group" id="outro-trim-group">
+                            <label for="outro-trim-seconds">去除片尾时长（秒）：</label>
+                            <div class="input-with-unit">
+                                <input type="number" id="outro-trim-seconds" min="0" max="300" value="0" step="0.01">
+                                <span class="unit">秒</span>
+                            </div>
+                            <span class="help-text">从视频结尾裁剪掉指定秒数（支持小数，如1.23秒）</span>
+                        </div>
+                        
+                        
+                    </div>
+                    
+                    <!-- 裁剪汇总 -->
+                    <div class="setting-group">
+                        <div class="trim-summary" id="trim-summary">
+                            <div class="summary-header">📊 裁剪汇总</div>
+                            <div class="summary-content">
+                                <div class="summary-item">
+                                    <span class="summary-label">去除片头：</span>
+                                    <span class="summary-value" id="intro-trim-display">0秒</span>
+                                </div>
+                                <div class="summary-item">
+                                    <span class="summary-label">去除片尾：</span>
+                                    <span class="summary-value" id="outro-trim-display">0秒</span>
+                                </div>
+                                <div class="summary-item total">
+                                    <span class="summary-label">总计裁剪：</span>
+                                    <span class="summary-value" id="total-trim-display">0秒</span>
+                                </div>
+                            </div>
+                            <div class="precision-warning" id="precision-warning" style="display: none;">
+                                <div class="warning-icon">⚠️</div>
+                                <div class="warning-text">
+                                    <strong>精度提醒</strong>：无损模式受关键帧限制，实际裁剪时间可能有偏差。如需精确裁剪，请选择"精确模式"。
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 输出设置 -->
+
+                    <div class="setting-group">
+                        <label for="intro-outro-quality">处理质量：</label>
+                        <select id="intro-outro-quality">
+                            <option value="quality-match" selected>智能质量匹配（推荐，精确+高质量）</option>
+                            <option value="copy">快速模式（可能不精确，受关键帧限制）</option>
+                            <option value="high">高质量重编码（精确，CRF18）</option>
+                            <option value="medium">标准重编码（精确，CRF23）</option>
+                            <option value="fast">快速重编码（精确，CRF28）</option>
+                        </select>
+                        <div class="help-text">
+                            <div><strong>智能质量匹配</strong>：自动检测原视频参数，精确裁剪且保持高质量，推荐使用</div>
+                            <div><strong>快速模式</strong>：直接裁剪，速度快但可能不精确（受关键帧限制）</div>
+                            <div><strong>重编码模式</strong>：完全精确的裁剪，可选择不同质量等级（CRF值）</div>
                         </div>
                     </div>
                 </div>

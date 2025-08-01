@@ -1,7 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { spawn } = require('child_process');
-const { ffmpegPath, ffprobePath } = require('./common-processor');
+const { ffmpegPath, ffprobePath, generateUniqueFilename, getHardwareAccelArgs, getBestHardwareEncoder, getAccelerationType } = require('./common-processor');
 
 // 分析视频文件的编码信息
 async function analyzeVideosForComposition(files, logCallback) {
@@ -483,20 +483,40 @@ function findOptimalFrameRate(frameRates) {
 }
 
 async function composeVideos(progressCallback, logCallback, outputPath, files, options) {
-    const outputDir = path.join(outputPath, 'video_composition');
+    const { composeType, format } = options;
+    
+    // 生成智能文件夹名
+    let folderName;
+    if (files.length === 1) {
+        const baseName = path.basename(files[0].name, path.extname(files[0].name));
+        folderName = `合成视频_${baseName}`;
+    } else {
+        folderName = `合成视频_多文件合成`;
+    }
+    
+    const outputDir = path.join(outputPath, folderName);
     await fs.mkdir(outputDir, { recursive: true });
 
-    const { composeType, filename, format } = options;
     let tempDir = null;
     let actualFiles = files; // 用于合成的实际文件（原文件或预处理后的文件）
     
     try {
         // 生成输出文件名，根据格式添加正确的扩展名
-        const outputFileName = `${filename}.${format}`;
+        let outputFileName;
+        if (files.length === 1) {
+            // 单个文件直接使用原名称
+            const baseName = path.basename(files[0].name, path.extname(files[0].name));
+            outputFileName = `${baseName}.${format}`;
+        } else {
+            // 多个文件使用通用名称
+            outputFileName = `合成视频.${format}`;
+        }
+        
+        const finalOutputPath = path.join(outputDir, outputFileName);
         
         if (logCallback) {
             logCallback('info', `🎬 开始合成视频，类型: ${getComposeTypeName(composeType)}`);
-            logCallback('info', `📁 输出文件: ${path.join(outputDir, outputFileName)}`);
+            logCallback('info', `📁 输出文件: ${finalOutputPath}`);
             logCallback('info', `🎞️ 输出格式: ${format.toUpperCase()}`);
         }
         
@@ -551,16 +571,17 @@ async function composeVideos(progressCallback, logCallback, outputPath, files, o
         progressCallback({ current: 0, total: 1, status: 'composing', file: '正在合成视频...' });
         
         // 步骤4: 构建FFmpeg参数并执行合成
+        const finalOutputFileName = path.basename(finalOutputPath);
         let ffmpegArgs;
         switch (composeType) {
             case 'concat':
-                ffmpegArgs = await buildConcatArgs(actualFiles, outputDir, outputFileName, options, qualitySettings, resolvedResolution, formatSettings);
+                ffmpegArgs = await buildConcatArgs(actualFiles, outputDir, finalOutputFileName, options, qualitySettings, resolvedResolution, formatSettings);
                 break;
             case 'sidebyside':
-                ffmpegArgs = await buildSideBySideArgs(actualFiles, outputDir, outputFileName, options, qualitySettings, resolvedResolution, formatSettings);
+                ffmpegArgs = await buildSideBySideArgs(actualFiles, outputDir, finalOutputFileName, options, qualitySettings, resolvedResolution, formatSettings);
                 break;
             case 'pip':
-                ffmpegArgs = await buildPipArgs(actualFiles, outputDir, outputFileName, options, qualitySettings, resolvedResolution, formatSettings);
+                ffmpegArgs = await buildPipArgs(actualFiles, outputDir, finalOutputFileName, options, qualitySettings, resolvedResolution, formatSettings);
                 break;
             default:
                 throw new Error(`不支持的合成类型: ${composeType}`);
@@ -602,7 +623,7 @@ async function composeVideos(progressCallback, logCallback, outputPath, files, o
         if (tempDir) {
             try {
                 await fs.rmdir(tempDir, { recursive: true });
-                if (logCallback) {
+        if (logCallback) {
                     logCallback('info', '🧹 临时文件清理完成');
                 }
             } catch (cleanupError) {
@@ -612,10 +633,10 @@ async function composeVideos(progressCallback, logCallback, outputPath, files, o
             }
         }
         
-        progressCallback({ current: 1, total: 1, status: 'complete', file: outputFileName });
+        progressCallback({ current: 1, total: 1, status: 'complete', file: finalOutputFileName });
         
         if (logCallback) {
-            logCallback('success', `✅ 视频合成完成: ${outputFileName}`);
+            logCallback('success', `✅ 视频合成完成: ${finalOutputFileName}`);
         }
         
         return { processed: 1, failed: 0 };
@@ -729,27 +750,41 @@ async function resolveResolution(files, resolutionSetting) {
 async function buildConcatArgs(files, outputDir, outputFileName, options, qualitySettings, resolution, formatSettings) {
     const { transition, audioMode, aspectRatio, background } = options;
     
-    // 创建concat列表文件
-    const concatListPath = path.join(outputDir, 'concat_list.txt');
-    const concatContent = files.map(file => `file '${file.path.replace(/'/g, "'\"'\"'")}'`).join('\n');
-    await fs.writeFile(concatListPath, concatContent);
+    // ✅ 使用filter_complex方式，完全参考intro-outro-processor.js
+    const args = [];
     
-    // 检查是否经过预处理或TS转换（这些情况下文件都已经统一格式）
-    const hasPreprocessedFiles = files.some(file => file.original !== undefined || file.isTS === true);
-    let videoFilter = hasPreprocessedFiles ? null : buildVideoFilter(resolution, aspectRatio, background);
+    // 添加跨平台硬件加速支持
+    args.push(...getHardwareAccelArgs());
     
-    const args = [
-        '-f', 'concat',
-        '-safe', '0',
-        '-i', concatListPath,
-        '-c:v', formatSettings.videoCodec,
-        '-c:a', formatSettings.audioCodec,
-        '-pix_fmt', formatSettings.pixelFormat
-    ];
+    const inputFiles = [];
+    let videoProcessing = '';  // 视频流处理部分
+    let concatInputs = '';     // concat输入部分
+    let inputIndex = 0;
     
-    // 根据质量设置添加编码参数
+    // 构建输入文件列表和filter
+    for (const file of files) {
+        args.push('-i', file.path);
+        inputFiles.push(file.path);
+        
+        // 标准化视频流处理 (setsar=1/1,setdar=16/9)
+        videoProcessing += `[${inputIndex}:v]setsar=1/1,setdar=16/9[v${inputIndex}];`;
+        concatInputs += `[v${inputIndex}][${inputIndex}:a]`;
+        inputIndex++;
+    }
+    
+    // 构建完整的filter_complex命令
+    const filterComplex = `${videoProcessing}${concatInputs}concat=n=${inputIndex}:v=1:a=1[v][a]`;
+    
+    args.push('-filter_complex', filterComplex);
+    args.push('-map', '[v]', '-map', '[a]');
+    
+    // ✅ 编码参数处理 (参考intro-outro-processor.js的质量设置逻辑)
     if (qualitySettings.isCustom) {
         // 自定义质量参数
+        args.push('-c:v', formatSettings.videoCodec);
+        args.push('-c:a', formatSettings.audioCodec);
+        args.push('-pix_fmt', formatSettings.pixelFormat);
+        
         if (formatSettings.videoCodec === 'libx264') {
             args.push('-profile:v', qualitySettings.videoProfile);
             args.push('-b:v', `${qualitySettings.videoBitrate}k`);
@@ -767,14 +802,32 @@ async function buildConcatArgs(files, outputDir, outputFileName, options, qualit
             args.push('-b:a', `${qualitySettings.audioBitrate}k`);
         }
     } else {
-        // 预设质量参数
+        // ✅ 预设质量参数 - filter_complex模式需要重编码
+        if (qualitySettings.preset === 'copy') {
+            // filter_complex模式不能使用-c copy，使用快速硬件编码
+            const encoder = getBestHardwareEncoder('h264', console.log);
+            args.push('-c:v', encoder);
+            
+            if (process.platform === 'darwin') {
+                args.push('-profile:v', 'main', '-b:v', '8000k', '-preset', 'faster');
+            } else {
+                args.push('-preset', 'faster', '-crf', '18');
+            }
+            
+            args.push('-c:a', 'aac', '-b:a', '128k');
+        } else {
+            // 其他质量预设
+            args.push('-c:v', formatSettings.videoCodec);
+            args.push('-c:a', formatSettings.audioCodec);
+            args.push('-pix_fmt', formatSettings.pixelFormat);
+            
         if (formatSettings.videoCodec === 'libx264') {
             args.push('-crf', qualitySettings.crf.toString());
             args.push('-preset', qualitySettings.preset);
-            // 添加默认profile设置
-            if (qualitySettings.videoProfile) {
-                args.push('-profile:v', qualitySettings.videoProfile);
-            }
+                // 添加默认profile设置
+                if (qualitySettings.videoProfile) {
+                    args.push('-profile:v', qualitySettings.videoProfile);
+                }
         } else if (formatSettings.videoCodec === 'wmv2') {
             const bitrateMap = { high: '5000k', medium: '2000k', fast: '1000k' };
             args.push('-b:v', bitrateMap[qualitySettings.preset] || '2000k');
@@ -787,13 +840,9 @@ async function buildConcatArgs(files, outputDir, outputFileName, options, qualit
             args.push('-b:a', '128k');
         }
     }
-    
-    // 添加视频滤镜
-    if (videoFilter) {
-        args.push('-vf', videoFilter);
     }
     
-    // 音频处理
+    // ✅ 音频处理
     if (audioMode === 'mute') {
         args.push('-an'); // 移除音频
     } else if (audioMode === 'normalize' && formatSettings.audioCodec !== 'wmav2') {
@@ -805,7 +854,12 @@ async function buildConcatArgs(files, outputDir, outputFileName, options, qualit
         args.push('-f', formatSettings.container);
     }
     
-    args.push(path.join(outputDir, outputFileName));
+    args.push('-y', path.join(outputDir, outputFileName));
+    
+    // ✅ 添加调试日志
+    console.log(`🎬 Filter命令: ${filterComplex}`);
+    console.log(`📋 输入文件数量: ${inputIndex}`);
+    console.log(`🚀 使用filter_complex模式，采用${getAccelerationType()}加速，避免音画同步问题`);
     
     return args;
 }
