@@ -163,6 +163,15 @@ body, html {
     text-align: center;
 }
 
+.file-order,
+.header-order {
+    flex-basis: 50px;
+    flex-shrink: 0;
+    text-align: center;
+    font-weight: 600;
+    color: #666;
+}
+
 .file-name,
 .header-name {
     flex-grow: 1;
@@ -258,6 +267,143 @@ body, html {
 
 .file-item.video {
     border-left: 3px solid #2196f3;
+}
+
+.file-item.compose {
+    border-left: 3px solid #ff6b35;
+    position: relative;
+}
+
+/* 拖拽手柄样式 */
+.drag-handle {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 12px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #999;
+    font-size: 12px;
+    cursor: grab;
+    user-select: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.file-item.compose:hover .drag-handle {
+    opacity: 1;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+/* 为拖拽手柄让出空间 */
+.file-item.compose .file-select {
+    margin-left: 20px;
+}
+
+/* 序号样式增强 */
+.order-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: bold;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.file-item.dragging .order-number {
+    background: linear-gradient(135deg, #ffeaa7 0%, #fab1a0 100%);
+    color: #2d3436;
+}
+
+/* 拖拽状态样式 */
+.file-item.dragging {
+    opacity: 0.5;
+    transform: rotate(3deg);
+    z-index: 1000;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+
+/* 拖拽悬停指示器 */
+.file-item.drag-over-top {
+    border-top: 3px solid #007bff;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+
+.file-item.drag-over-bottom {
+    border-bottom: 3px solid #007bff;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+/* 拖拽悬停时的背景色 */
+.file-item.drag-over-top,
+.file-item.drag-over-bottom {
+    background-color: #f0f8ff;
+}
+
+/* 拖拽时的鼠标样式 */
+.file-item[draggable="true"] {
+    cursor: move;
+}
+
+.file-item[draggable="true"]:hover {
+    background-color: #f5f5f5;
+}
+
+/* 加载期间禁用拖拽的样式 */
+.file-item.loading-disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background-color: #f8f9fa;
+}
+
+.file-item.loading-disabled .drag-handle {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.file-item.loading-disabled:hover {
+    background-color: #f8f9fa !important;
+}
+
+/* 拖拽提示样式 */
+.compose-tip {
+    background: linear-gradient(90deg, #fff3cd, #ffeaa7);
+    border: 1px solid #ffeaa7;
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin: 8px 0;
+    font-size: 12px;
+    color: #856404;
+    transition: all 0.3s ease;
+}
+
+.compose-tip .tip-content {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.compose-tip .tip-icon {
+    font-size: 14px;
+}
+
+.compose-tip .tip-text {
+    flex: 1;
+    font-weight: 500;
 }
 
 .file-name-text {
@@ -499,6 +645,12 @@ body, html {
     animation: shimmer 1.5s linear infinite;
 }
 
+.progress-fill.converting {
+    background: linear-gradient(45deg, #17a2b8 25%, #6f42c1 25%, #6f42c1 50%, #17a2b8 50%, #17a2b8 75%, #6f42c1 75%);
+    background-size: 20px 20px;
+    animation: shimmer 1s linear infinite;
+}
+
 .progress-glow {
     position: absolute;
     top: 0;
@@ -539,6 +691,10 @@ body, html {
     border-top-color: #ffc107;
 }
 
+.progress-spinner.converting {
+    border-top-color: #17a2b8;
+}
+
 .progress-text {
     font-size: 14px;
     color: #666;
@@ -554,6 +710,11 @@ body, html {
 .progress-text.preprocessing {
     color: #ffc107;
     animation: bounce 1s ease-in-out infinite;
+}
+
+.progress-text.converting {
+    color: #17a2b8;
+    animation: pulse 1.5s ease-in-out infinite;
 }
 
 .progress-text.complete {

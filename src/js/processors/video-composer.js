@@ -220,31 +220,151 @@ function needsPreprocessing(videoInfos, targetFormat, targetResolution, logCallb
                               analysis.needsResolutionUnification ||
                               analysis.needsPixelFormatUnification;
     
-    const needsPreprocessingFlag = videosNeedingPreprocessing.length > 0;
+    let needsPreprocessingFlag = videosNeedingPreprocessing.length > 0;
+    let useQuickTSConversion = false;
+    
+    // 智能判断：如果有多个视频文件且格式相同，优先使用快速TS转换
+    if (!needsPreprocessingFlag && videoInfos.length > 1) {
+        // 检查是否适合TS转换（格式相同且都是H.264）
+        const allH264 = videoInfos.every(video => 
+            video.videoCodec.toLowerCase().includes('h264') || 
+            video.videoCodec.toLowerCase() === 'avc1'
+        );
+        
+        if (allH264) {
+            useQuickTSConversion = true;
+            if (logCallback) {
+                logCallback('info', `⚡ 检测到相同H.264格式视频，将使用快速TS转换方法（无损、速度快）`);
+            }
+        } else {
+            // 非H.264或格式不统一，使用重编码预处理
+            needsPreprocessingFlag = true;
+            for (let i = 0; i < videoInfos.length; i++) {
+                videosNeedingPreprocessing.push({
+                    index: i,
+                    fileName: videoInfos[i].fileName,
+                    reasons: {
+                        videoCodec: false,
+                        audioCodec: false,
+                        frameRate: false,
+                        resolution: false,
+                        pixelFormat: false,
+                        forceStandardization: true
+                    }
+                });
+            }
+        }
+    }
     
     if (logCallback) {
         logCallback('info', `🎯 以第一个视频为基准: ${referenceVideo.fileName}`);
         logCallback('info', `📊 基准格式: ${referenceVideo.videoCodec}/${referenceVideo.audioCodec}, ${referenceResolution}, ${referenceFrameRate}fps`);
         
         if (needsPreprocessingFlag) {
-            logCallback('info', `⚠️  检测到 ${videosNeedingPreprocessing.length} 个视频需要预处理以匹配基准格式:`);
+            if (videosNeedingPreprocessing.some(v => v.reasons.forceStandardization)) {
+                logCallback('info', `🔄 多个视频文件，为确保concat兼容性，将对所有 ${videosNeedingPreprocessing.length} 个视频进行标准化预处理`);
+            } else {
+                logCallback('info', `⚠️  检测到 ${videosNeedingPreprocessing.length} 个视频需要预处理以匹配基准格式:`);
+            }
             
             videosNeedingPreprocessing.forEach(video => {
-                const reasons = [];
-                if (video.reasons.videoCodec) reasons.push('视频编码');
-                if (video.reasons.audioCodec) reasons.push('音频编码');
-                if (video.reasons.frameRate) reasons.push('帧率');
-                if (video.reasons.resolution) reasons.push('分辨率');
-                if (video.reasons.pixelFormat) reasons.push('像素格式');
-                
-                logCallback('info', `   - ${video.fileName}: ${reasons.join(', ')}`);
+                if (video.reasons.forceStandardization) {
+                    logCallback('info', `   - ${video.fileName}: 标准化处理`);
+                } else {
+                    const reasons = [];
+                    if (video.reasons.videoCodec) reasons.push('视频编码');
+                    if (video.reasons.audioCodec) reasons.push('音频编码');
+                    if (video.reasons.frameRate) reasons.push('帧率');
+                    if (video.reasons.resolution) reasons.push('分辨率');
+                    if (video.reasons.pixelFormat) reasons.push('像素格式');
+                    
+                    logCallback('info', `   - ${video.fileName}: ${reasons.join(', ')}`);
+                }
             });
         } else {
-            logCallback('info', '✅ 所有视频格式一致，无需预处理');
+            logCallback('info', '✅ 单个视频文件，无需预处理');
         }
     }
     
-    return { needsPreprocessing: needsPreprocessingFlag, analysis };
+    // 更新分析结果以包含所有需要预处理的视频
+    analysis.videosNeedingPreprocessing = videosNeedingPreprocessing;
+    
+    return { 
+        needsPreprocessing: needsPreprocessingFlag, 
+        useQuickTSConversion: useQuickTSConversion,
+        analysis 
+    };
+}
+
+// 快速TS转换方法 - 无损流拷贝，速度快
+async function convertToTSFormat(videoInfos, outputDir, progressCallback, logCallback) {
+    const tsFiles = [];
+    const tempDir = path.join(outputDir, 'temp_ts');
+    await fs.mkdir(tempDir, { recursive: true });
+    
+    if (logCallback) {
+        logCallback('info', `⚡ 开始TS转换 ${videoInfos.length} 个视频文件（无损快速模式）...`);
+    }
+    
+    for (let i = 0; i < videoInfos.length; i++) {
+        const video = videoInfos[i];
+        const tsFileName = `${i + 1}_${path.basename(video.fileName, path.extname(video.fileName))}.ts`;
+        const tsPath = path.join(tempDir, tsFileName);
+        
+        if (progressCallback) {
+            progressCallback({ 
+                current: i, 
+                total: videoInfos.length, 
+                status: 'converting', 
+                file: `TS转换: ${video.fileName}` 
+            });
+        }
+        
+        // TS转换参数：流拷贝 + h264_mp4toannexb
+        const args = [
+            '-i', video.file,
+            '-c', 'copy',  // 流拷贝，无损
+            '-bsf:v', 'h264_mp4toannexb',  // 关键：转换NAL格式
+            '-y', // 覆盖输出文件
+            tsPath
+        ];
+        
+        try {
+            if (logCallback) {
+                logCallback('info', `🔄 转换 ${video.fileName} → ${tsFileName}`);
+            }
+            
+            await executeFFmpeg(args, logCallback);
+            
+            tsFiles.push({
+                name: tsFileName,
+                path: tsPath,
+                original: video.fileName,
+                isTS: true
+            });
+            
+            if (logCallback) {
+                logCallback('success', `✅ ${video.fileName} TS转换完成`);
+            }
+        } catch (error) {
+            throw new Error(`TS转换失败 ${video.fileName}: ${error.message}`);
+        }
+    }
+    
+    if (progressCallback) {
+        progressCallback({ 
+            current: videoInfos.length, 
+            total: videoInfos.length, 
+            status: 'complete', 
+            file: '所有视频TS转换完成' 
+        });
+    }
+    
+    if (logCallback) {
+        logCallback('success', `🎯 所有视频TS转换完成，开始合成...`);
+    }
+    
+    return { tsFiles, tempDir };
 }
 
 // 预处理视频文件 - 以第一个视频为基准
@@ -391,10 +511,25 @@ async function composeVideos(progressCallback, logCallback, outputPath, files, o
         const resolvedResolution = await resolveResolution(files, options.resolution);
         
         // 步骤2: 判断是否需要预处理
-        const { needsPreprocessing: needsPreprocessingFlag, analysis } = needsPreprocessing(videoInfos, format, resolvedResolution, logCallback);
+        const { needsPreprocessing: needsPreprocessingFlag, useQuickTSConversion, analysis } = needsPreprocessing(videoInfos, format, resolvedResolution, logCallback);
         
-        // 步骤3: 如果需要预处理，则进行预处理
-        if (needsPreprocessingFlag) {
+        // 步骤3: 智能选择预处理方式
+        if (useQuickTSConversion) {
+            // 使用快速TS转换（推荐方式）
+            progressCallback({ current: 0, total: 1, status: 'converting', file: '正在进行TS转换...' });
+            
+            const { tsFiles, tempDir: tempDirPath } = await convertToTSFormat(
+                videoInfos, 
+                outputDir, 
+                progressCallback, 
+                logCallback
+            );
+            
+            tempDir = tempDirPath;
+            actualFiles = tsFiles; // 使用TS转换后的文件
+            
+        } else if (needsPreprocessingFlag) {
+            // 使用完整重编码预处理（兼容性处理）
             progressCallback({ current: 0, total: 1, status: 'preprocessing', file: '正在预处理视频...' });
             
             const { preprocessedFiles, tempDir: tempDirPath } = await preprocessVideos(
@@ -439,6 +574,14 @@ async function composeVideos(progressCallback, logCallback, outputPath, files, o
         } else {
             // 并排或画中画模式：取最长视频的时长
             totalDuration = Math.max(...videoInfos.map(video => video.duration));
+        }
+        
+        // 调试日志：显示计算的总时长
+        if (logCallback) {
+            logCallback('info', `⏱️ 预计处理时长: ${formatTime(totalDuration)} (${totalDuration.toFixed(2)}秒)`);
+            videoInfos.forEach((video, index) => {
+                logCallback('info', `📝 视频${index + 1}: ${video.fileName} - ${formatTime(video.duration)} (${video.duration.toFixed(2)}秒)`);
+            });
         }
         
         // 创建合成进度回调
@@ -591,8 +734,8 @@ async function buildConcatArgs(files, outputDir, outputFileName, options, qualit
     const concatContent = files.map(file => `file '${file.path.replace(/'/g, "'\"'\"'")}'`).join('\n');
     await fs.writeFile(concatListPath, concatContent);
     
-    // 检查是否经过预处理（只要有任何文件经过预处理，所有文件都已统一格式）
-    const hasPreprocessedFiles = files.some(file => file.original !== undefined);
+    // 检查是否经过预处理或TS转换（这些情况下文件都已经统一格式）
+    const hasPreprocessedFiles = files.some(file => file.original !== undefined || file.isTS === true);
     let videoFilter = hasPreprocessedFiles ? null : buildVideoFilter(resolution, aspectRatio, background);
     
     const args = [
@@ -937,6 +1080,9 @@ function executeFFmpeg(args, logCallback, progressCallback = null, totalDuration
         
         if (logCallback) {
             logCallback('command', `🔧 执行命令: ${command}`);
+            if (totalDuration && totalDuration > 0) {
+                logCallback('info', `📊 预期处理时长: ${formatTime(totalDuration)} (${totalDuration.toFixed(2)}秒)`);
+            }
         }
         
         const ffmpeg = spawn(ffmpegPath, args);
@@ -974,7 +1120,20 @@ function executeFFmpeg(args, logCallback, progressCallback = null, totalDuration
                     // 计算进度百分比
                     if (currentTime > lastProgressTime) {
                         lastProgressTime = currentTime;
-                        const progressPercent = Math.min((currentTime / totalDuration) * 100, 100);
+                        const rawProgressPercent = (currentTime / totalDuration) * 100;
+                        const progressPercent = Math.min(rawProgressPercent, 99); // 最大99%，真正的100%由进程结束时触发
+                        
+                        // 添加调试日志（每10秒输出一次，或者进度有显著变化时）
+                        const isSignificantProgress = Math.floor(currentTime) % 10 === 0;
+                        
+                        // if (isSignificantProgress && logCallback) {
+                        //     logCallback('info', `🕐 进度: ${formatTime(currentTime)}/${formatTime(totalDuration)} (${rawProgressPercent.toFixed(1)}%) - 当前时间戳: ${timeStr}`);
+                        // }
+                        
+                        // 如果进度超过预期总时长，记录警告
+                        if (currentTime > totalDuration && logCallback) {
+                            logCallback('warn', `⚠️ 处理时间超出预期：${formatTime(currentTime)} > ${formatTime(totalDuration)}`);
+                        }
                         
                         // 回调真实进度更新
                         progressCallback({
@@ -991,17 +1150,25 @@ function executeFFmpeg(args, logCallback, progressCallback = null, totalDuration
         });
         
         ffmpeg.on('close', (code) => {
+            if (logCallback) {
+                logCallback('info', `🏁 FFmpeg进程结束，退出码: ${code}, 最后处理时间: ${formatTime(lastProgressTime)}`);
+            }
+            
             if (code === 0) {
-                // 完成时显示100%进度
+                // 只有在成功完成时才显示100%进度
                 if (progressCallback) {
                     progressCallback({
                         current: 100,
                         total: 100,
-                        status: 'complete'
+                        status: 'complete',
+                        file: '处理完成'
                     });
                 }
                 resolve();
             } else {
+                if (logCallback) {
+                    logCallback('error', `❌ FFmpeg处理失败，错误信息: ${stderr}`);
+                }
                 reject(new Error(`FFmpeg_Error: ${stderr}`));
             }
         });

@@ -8,6 +8,10 @@ class MediaProcessorApp {
         this.currentFileType = 'mp3';
         this.isProcessing = false;
         
+        // 文件信息加载状态
+        this.isLoadingFileDetails = false;
+        this.dragDropEnabled = false;
+        
         this.initializeElements();
         this.bindEvents();
         this.checkFFmpegStatus();
@@ -135,6 +139,7 @@ class MediaProcessorApp {
         this.fileTabs = document.querySelectorAll('.file-tab');
         this.tabContents = document.querySelectorAll('.tab-content');
         this.configTitle = document.getElementById('config-title');
+        this.composeTip = document.querySelector('.compose-tip');
 
         // MP3 设置元素
         this.mp3ForceProcessRadios = document.querySelectorAll('input[name="force-process"]');
@@ -330,6 +335,25 @@ class MediaProcessorApp {
             }
         }
         
+        // 控制拖拽提示和序号列的显示
+        if (this.composeTip) {
+            if (type === 'compose') {
+                this.composeTip.style.display = 'block';
+            } else {
+                this.composeTip.style.display = 'none';
+            }
+        }
+        
+        // 控制序号列显示
+        const headerOrder = document.querySelector('.header-order');
+        if (headerOrder) {
+            if (type === 'compose') {
+                headerOrder.style.display = 'flex';
+            } else {
+                headerOrder.style.display = 'none';
+            }
+        }
+        
         // 检查是否需要获取详细信息
         const files = this.mediaFiles[type] || [];
         const needsDetails = files.some(file => 
@@ -391,7 +415,11 @@ class MediaProcessorApp {
                 : (loadDetails ? '<span class="loading-spinner"></span>正在获取信息...' : '点击处理时获取详情');
             
             return `
-                <div class="file-item ${this.currentFileType}" data-index="${index}">
+                <div class="file-item ${this.currentFileType}" data-index="${index}" data-type="${this.currentFileType}" ${this.currentFileType === 'compose' ? 'draggable="true"' : ''}>
+                    ${this.currentFileType === 'compose' ? '<div class="drag-handle" title="拖拽排序">⋮⋮</div>' : ''}
+                    <div class="file-order" style="display: ${this.currentFileType === 'compose' ? 'flex' : 'none'};">
+                        <span class="order-number">${index + 1}</span>
+                    </div>
                     <div class="file-select">
                         <input type="checkbox" data-index="${index}">
                     </div>
@@ -426,6 +454,11 @@ class MediaProcessorApp {
             });
         });
         
+        // 为视频合成模式添加拖拽排序功能（仅在非加载状态时启用）
+        if (this.currentFileType === 'compose') {
+            this.setupDragAndDrop();
+        }
+        
         this.updateFileCount();
         this.updateSelectAllCheckbox();
         
@@ -435,10 +468,18 @@ class MediaProcessorApp {
         // 只在需要时获取文件详细信息
         if (loadDetails) {
             this.loadFileDetails(files);
+        } else {
+            // 如果不需要加载详细信息，立即启用拖拽功能
+            this.isLoadingFileDetails = false;
+            this.updateDragDropState();
         }
     }
 
     async loadFileDetails(files) {
+        // 设置加载状态
+        this.isLoadingFileDetails = true;
+        this.updateDragDropState();
+        
         // 延迟1秒开始获取，避免界面卡顿
         await new Promise(resolve => setTimeout(resolve, 1000));
         
@@ -476,6 +517,71 @@ class MediaProcessorApp {
             // 每个文件之间间隔200ms，避免过度占用资源
             if (i < files.length - 1) {
                 await new Promise(resolve => setTimeout(resolve, 200));
+            }
+        }
+        
+        // 完成加载，启用拖拽功能
+        this.isLoadingFileDetails = false;
+        this.updateDragDropState();
+    }
+
+    updateDragDropState() {
+        if (this.currentFileType !== 'compose') {
+            return; // 只有合成模式才需要拖拽功能
+        }
+        
+        const fileItems = this.fileList.querySelectorAll('.file-item');
+        const composeTip = document.querySelector('.compose-tip');
+        
+        console.log('updateDragDropState called:', {
+            isLoadingFileDetails: this.isLoadingFileDetails,
+            fileItemsCount: fileItems.length,
+            currentFileType: this.currentFileType
+        });
+        
+        if (this.isLoadingFileDetails) {
+            // 禁用拖拽功能
+            this.dragDropEnabled = false;
+            fileItems.forEach(item => {
+                item.draggable = false;
+                item.classList.add('loading-disabled');
+            });
+            
+            // 更新提示文字
+            if (composeTip) {
+                composeTip.innerHTML = `
+                    <div class="compose-tip-content">
+                        <span class="loading-spinner"></span>
+                        <span>正在加载视频信息，请稍候...</span>
+                    </div>
+                `;
+            }
+        } else {
+            // 启用拖拽功能
+            this.dragDropEnabled = true;
+            let enabledCount = 0;
+            fileItems.forEach(item => {
+                console.log('Processing item:', {
+                    datasetType: item.dataset.type,
+                    classList: item.classList.toString(),
+                    draggable: item.draggable
+                });
+                if (item.dataset.type === 'compose') {
+                    item.draggable = true;
+                    item.classList.remove('loading-disabled');
+                    enabledCount++;
+                }
+            });
+            console.log('Enabled drag for', enabledCount, 'items');
+            
+            // 恢复提示文字
+            if (composeTip) {
+                composeTip.innerHTML = `
+                    <div class="compose-tip-content">
+                        <span class="compose-tip-icon">⋮⋮</span>
+                        <span>拖拽视频文件可调整合成顺序</span>
+                    </div>
+                `;
             }
         }
     }
@@ -797,6 +903,12 @@ class MediaProcessorApp {
                 this.progressSpinner.classList.add('visible', 'preprocessing');
                 this.progressText.textContent = `预处理中 (${current}/${total}): ${file}`;
                 
+            } else if (status === 'converting') {
+                this.progressFill.classList.add('converting');
+                this.progressText.classList.add('converting');
+                this.progressSpinner.classList.add('visible', 'converting');
+                this.progressText.textContent = `TS转换中 (${current}/${total}): ${file}`;
+                
             } else if (status === 'complete') {
                 this.stopSimulatedProgress();
                 this.progressText.classList.add('complete');
@@ -1033,6 +1145,160 @@ class MediaProcessorApp {
             // 预设质量 - 隐藏详细参数设置
             this.customQualityGroup.style.display = 'none';
         }
+    }
+
+    setupDragAndDrop() {
+        let draggedElement = null;
+        let draggedIndex = null;
+        
+        // 选择所有compose类型的文件项，而不仅仅是当前可拖拽的
+        const fileItems = this.fileList.querySelectorAll('.file-item.compose');
+        
+        fileItems.forEach((item, index) => {
+            // 拖拽开始
+            item.addEventListener('dragstart', (e) => {
+                // 如果拖拽功能被禁用，阻止拖拽
+                if (!this.dragDropEnabled) {
+                    e.preventDefault();
+                    return false;
+                }
+                
+                draggedElement = item;
+                draggedIndex = parseInt(item.dataset.index);
+                item.classList.add('dragging');
+                
+                // 设置拖拽数据
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/html', item.outerHTML);
+                
+                // 创建自定义拖拽图像
+                const dragImage = item.cloneNode(true);
+                dragImage.style.transform = 'rotate(3deg)';
+                dragImage.style.opacity = '0.8';
+                document.body.appendChild(dragImage);
+                e.dataTransfer.setDragImage(dragImage, 0, 0);
+                setTimeout(() => document.body.removeChild(dragImage), 0);
+            });
+            
+            // 拖拽结束
+            item.addEventListener('dragend', (e) => {
+                item.classList.remove('dragging');
+                this.fileList.querySelectorAll('.file-item').forEach(el => {
+                    el.classList.remove('drag-over-top', 'drag-over-bottom');
+                });
+                draggedElement = null;
+                draggedIndex = null;
+            });
+            
+            // 拖拽悬停
+            item.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                
+                if (draggedElement && draggedElement !== item) {
+                    const rect = item.getBoundingClientRect();
+                    const midpoint = rect.top + rect.height / 2;
+                    
+                    // 清除之前的拖拽样式
+                    item.classList.remove('drag-over-top', 'drag-over-bottom');
+                    
+                    // 根据鼠标位置决定插入位置
+                    if (e.clientY < midpoint) {
+                        item.classList.add('drag-over-top');
+                    } else {
+                        item.classList.add('drag-over-bottom');
+                    }
+                }
+            });
+            
+            // 离开拖拽区域
+            item.addEventListener('dragleave', (e) => {
+                // 只有当真正离开元素时才移除样式
+                if (!item.contains(e.relatedTarget)) {
+                    item.classList.remove('drag-over-top', 'drag-over-bottom');
+                }
+            });
+            
+            // 放置
+            item.addEventListener('drop', (e) => {
+                e.preventDefault();
+                
+                if (draggedElement && draggedElement !== item) {
+                    const targetIndex = parseInt(item.dataset.index);
+                    const rect = item.getBoundingClientRect();
+                    const midpoint = rect.top + rect.height / 2;
+                    
+                    // 确定插入位置
+                    let insertIndex = targetIndex;
+                    if (e.clientY >= midpoint) {
+                        insertIndex = targetIndex + 1;
+                    }
+                    
+                    // 调整索引（如果拖拽元素在目标之前）
+                    if (draggedIndex < insertIndex) {
+                        insertIndex--;
+                    }
+                    
+                    // 执行重排序
+                    this.reorderFiles(draggedIndex, insertIndex);
+                }
+                
+                // 清除拖拽样式
+                this.fileList.querySelectorAll('.file-item').forEach(el => {
+                    el.classList.remove('drag-over-top', 'drag-over-bottom');
+                });
+            });
+        });
+    }
+    
+    reorderFiles(fromIndex, toIndex) {
+        // 获取当前文件数组
+        const files = this.currentFileType === 'compose' ? 
+            this.mediaFiles.video : 
+            this.mediaFiles[this.currentFileType] || [];
+        
+        if (fromIndex < 0 || fromIndex >= files.length || 
+            toIndex < 0 || toIndex > files.length || 
+            fromIndex === toIndex) {
+            return;
+        }
+        
+        // 移动文件
+        const [movedFile] = files.splice(fromIndex, 1);
+        files.splice(toIndex, 0, movedFile);
+        
+        // 更新选中文件数组中的引用
+        this.selectedFiles = this.selectedFiles.map(selectedFile => {
+            const newIndex = files.findIndex(f => f.path === selectedFile.path);
+            return newIndex !== -1 ? files[newIndex] : selectedFile;
+        });
+        
+        // 重新渲染文件列表
+        this.renderFileList(false);
+        
+        // 更新序号显示
+        this.updateOrderNumbers();
+        
+        // 显示排序提示
+        if (this.addLog) {
+            this.addLog('info', `📋 视频顺序已调整: ${movedFile.name} 移动到位置 ${toIndex + 1}`);
+        }
+    }
+    
+    updateOrderNumbers() {
+        // 只在合成模式下更新序号
+        if (this.currentFileType !== 'compose') return;
+        
+        const orderNumbers = this.fileList.querySelectorAll('.order-number');
+        orderNumbers.forEach((orderElement, index) => {
+            orderElement.textContent = index + 1;
+            
+            // 添加一个简单的动画效果
+            orderElement.style.transform = 'scale(1.2)';
+            setTimeout(() => {
+                orderElement.style.transform = 'scale(1)';
+            }, 200);
+        });
     }
 
     formatFileSize(bytes) {
