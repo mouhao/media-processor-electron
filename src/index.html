@@ -26,6 +26,7 @@
                     <button class="file-tab" data-type="video">🎬 视频转m3u8</button>
                     <button class="file-tab" data-type="compose">🎭 视频合成和压缩</button>
                     <button class="file-tab" data-type="intro-outro">🎬 视频片头片尾处理</button>
+                    <button class="file-tab" data-type="logo-watermark">🏷️ 视频添加LOGO水印</button>
                 </div>
                 
                 <div class="compose-tip" style="display: none;">
@@ -468,6 +469,180 @@
                             <div><strong>智能质量匹配</strong>：自动检测原视频参数，精确裁剪且保持高质量，推荐使用</div>
                             <div><strong>快速模式</strong>：直接裁剪，速度快但可能不精确（受关键帧限制）</div>
                             <div><strong>重编码模式</strong>：完全精确的裁剪，可选择不同质量等级（CRF值）</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- LOGO水印设置 -->
+                <div id="logo-watermark-settings" class="tab-content">
+                    <h4>LOGO水印设置</h4>
+                    
+                    <!-- LOGO设置 -->
+                    <div class="setting-group">
+                        <h5>🎨 LOGO设置</h5>
+                        <div class="setting-group inline">
+                            <label>添加LOGO：</label>
+                            <div class="radio-group">
+                                <label><input type="radio" name="add-logo" value="no" checked> 否</label>
+                                <label><input type="radio" name="add-logo" value="yes"> 是</label>
+                            </div>
+                        </div>
+                        
+                        <div class="setting-group" id="logo-file-group" style="display: none;">
+                            <label for="logo-file">LOGO图片文件：</label>
+                            <div class="file-input-group">
+                                <input type="text" id="logo-file" placeholder="选择LOGO图片" readonly>
+                                <button id="select-logo-btn" class="btn btn-secondary">选择图片</button>
+                            </div>
+                        </div>
+                        
+                        <div class="setting-group" id="logo-opacity-group" style="display: none;">
+                            <label for="logo-opacity">LOGO透明度：</label>
+                            <div class="input-with-unit">
+                                <input type="range" id="logo-opacity" min="0" max="1" step="0.1" value="1">
+                                <span class="unit" id="logo-opacity-value">100%</span>
+                            </div>
+                        </div>
+                        
+                        <div class="setting-group" id="logo-time-group" style="display: none;">
+                            <label>LOGO显示时间：</label>
+                            <div class="radio-group">
+                                <label><input type="radio" name="logo-time-mode" value="full" checked> 全程显示</label>
+                                <label><input type="radio" name="logo-time-mode" value="custom"> 自定义时间</label>
+                            </div>
+                            <div class="time-range-inputs" id="logo-time-inputs" style="display: none;">
+                                <div class="time-input-group">
+                                    <label for="logo-start-time">开始时间:</label>
+                                    <input type="number" id="logo-start-time" min="0" step="0.1" value="0">
+                                    <span class="unit">秒</span>
+                                </div>
+                                <div class="time-input-group">
+                                    <label for="logo-end-time">结束时间:</label>
+                                    <input type="number" id="logo-end-time" min="0" step="0.1" value="10">
+                                    <span class="unit">秒</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 水印设置 -->
+                    <div class="setting-group">
+                        <h5>🌊 水印设置</h5>
+                        <div class="setting-group inline">
+                            <label>添加水印：</label>
+                            <div class="radio-group">
+                                <label><input type="radio" name="add-watermark" value="no" checked> 否</label>
+                                <label><input type="radio" name="add-watermark" value="yes"> 是</label>
+                            </div>
+                        </div>
+                        
+                        <div class="setting-group" id="watermark-file-group" style="display: none;">
+                            <label for="watermark-file">水印图片文件：</label>
+                            <div class="file-input-group">
+                                <input type="text" id="watermark-file" placeholder="选择水印图片" readonly>
+                                <button id="select-watermark-btn" class="btn btn-secondary">选择图片</button>
+                            </div>
+                        </div>
+                        
+                        <div class="setting-group" id="watermark-opacity-group" style="display: none;">
+                            <label for="watermark-opacity">水印透明度：</label>
+                            <div class="input-with-unit">
+                                <input type="range" id="watermark-opacity" min="0" max="1" step="0.1" value="0.7">
+                                <span class="unit" id="watermark-opacity-value">70%</span>
+                            </div>
+                        </div>
+                        
+                        <div class="setting-group" id="watermark-time-group" style="display: none;">
+                            <label>水印显示时间：</label>
+                            <div class="radio-group">
+                                <label><input type="radio" name="watermark-time-mode" value="full" checked> 全程显示</label>
+                                <label><input type="radio" name="watermark-time-mode" value="custom"> 自定义时间</label>
+                            </div>
+                            <div class="time-range-inputs" id="watermark-time-inputs" style="display: none;">
+                                <div class="time-input-group">
+                                    <label for="watermark-start-time">开始时间:</label>
+                                    <input type="number" id="watermark-start-time" min="0" step="0.1" value="0">
+                                    <span class="unit">秒</span>
+                                </div>
+                                <div class="time-input-group">
+                                    <label for="watermark-end-time">结束时间:</label>
+                                    <input type="number" id="watermark-end-time" min="0" step="0.1" value="10">
+                                    <span class="unit">秒</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 位置和大小设置 -->
+                    <div class="setting-group">
+                        <h5>📐 位置和大小</h5>
+                        
+                        <!-- LOGO位置设置 -->
+                        <div class="position-settings" id="logo-position-settings" style="display: none;">
+                            <h6>LOGO位置和大小：</h6>
+                            <div class="position-controls">
+                                <div class="position-input-group">
+                                    <label>X坐标:</label>
+                                    <input type="number" id="logo-x" min="0" value="50">
+                                    <span class="unit">px</span>
+                                </div>
+                                <div class="position-input-group">
+                                    <label>Y坐标:</label>
+                                    <input type="number" id="logo-y" min="0" value="50">
+                                    <span class="unit">px</span>
+                                </div>
+                                <div class="position-input-group">
+                                    <label>宽度:</label>
+                                    <input type="number" id="logo-width" min="10" value="100">
+                                    <span class="unit">px</span>
+                                </div>
+                                <div class="position-input-group">
+                                    <label>高度:</label>
+                                    <input type="number" id="logo-height" min="10" value="100">
+                                    <span class="unit">px</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 水印位置设置 -->
+                        <div class="position-settings" id="watermark-position-settings" style="display: none;">
+                            <h6>水印位置和大小：</h6>
+                            <div class="position-controls">
+                                <div class="position-input-group">
+                                    <label>X坐标:</label>
+                                    <input type="number" id="watermark-x" min="0" value="50">
+                                    <span class="unit">px</span>
+                                </div>
+                                <div class="position-input-group">
+                                    <label>Y坐标:</label>
+                                    <input type="number" id="watermark-y" min="0" value="200">
+                                    <span class="unit">px</span>
+                                </div>
+                                <div class="position-input-group">
+                                    <label>宽度:</label>
+                                    <input type="number" id="watermark-width" min="10" value="80">
+                                    <span class="unit">px</span>
+                                </div>
+                                <div class="position-input-group">
+                                    <label>高度:</label>
+                                    <input type="number" id="watermark-height" min="10" value="80">
+                                    <span class="unit">px</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 输出设置 -->
+                    <div class="setting-group">
+                        <h5>📤 输出设置</h5>
+                        <div class="setting-group">
+                            <label for="logo-watermark-quality">处理质量：</label>
+                            <select id="logo-watermark-quality">
+                                <option value="source-match" selected>匹配源视频质量（推荐）</option>
+                                <option value="high">高质量 (CRF 18)</option>
+                                <option value="medium">标准质量 (CRF 23)</option>
+                                <option value="fast">快速处理 (CRF 28)</option>
+                            </select>
                         </div>
                     </div>
                 </div>

@@ -8,6 +8,7 @@ const { processMp3Files } = require('./src/js/processors/mp3-processor.js');
 const { processVideoFiles } = require('./src/js/processors/video-processor.js');
 const { composeVideos } = require('./src/js/processors/video-composer.js');
 const { processIntroOutro } = require('./src/js/processors/intro-outro-processor.js');
+const { processLogoWatermark } = require('./src/js/processors/logo-watermark-processor.js');
 
 // 保持窗口对象的全局引用
 let mainWindow;
@@ -124,6 +125,74 @@ ipcMain.handle('select-files', async () => {
   }
 
   return { success: true, files: result.filePaths };
+});
+
+// 选择单个视频文件对话框（用于LOGO水印功能）
+ipcMain.handle('select-single-video', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    title: '选择视频文件',
+    filters: [
+      { name: '视频文件', extensions: ['mp4', 'avi', 'mov', 'wmv', 'mkv', 'flv', 'webm'] },
+      { name: '所有文件', extensions: ['*'] }
+    ]
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return { success: false, file: null };
+  }
+
+  return { success: true, file: result.filePaths[0] };
+});
+
+// 选择图片文件对话框（用于LOGO和水印）
+ipcMain.handle('select-image-file', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    title: '选择图片文件',
+    filters: [
+      { name: '图片文件', extensions: ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'] },
+      { name: 'PNG图片', extensions: ['png'] },
+      { name: 'JPEG图片', extensions: ['jpg', 'jpeg'] },
+      { name: '所有文件', extensions: ['*'] }
+    ]
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return { success: false, file: null };
+  }
+
+  return { success: true, file: result.filePaths[0] };
+});
+
+// 使用自定义过滤器选择多个文件
+ipcMain.handle('select-files-with-filter', async (event, filters) => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile', 'multiSelections'],
+    title: '选择文件',
+    filters: filters
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return { success: false, files: [] };
+  }
+
+  return { success: true, files: result.filePaths };
+});
+
+// 使用自定义过滤器选择单个文件
+ipcMain.handle('select-single-file-with-filter', async (event, filters) => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    title: '选择文件',
+    filters: filters
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return { success: false, file: null };
+  }
+
+  return { success: true, file: result.filePaths[0] };
 });
 
 // 扫描文件夹中的媒体文件
@@ -264,6 +333,61 @@ ipcMain.handle('process-intro-outro', async (event, { outputPath, files, options
     return { success: true };
   } catch (error) {
     console.error('处理视频片头片尾时出错:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// LOGO水印文件选择
+ipcMain.handle('select-logo-file', async () => {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: [
+        { name: '图片文件', extensions: ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'svg'] },
+        { name: '所有文件', extensions: ['*'] }
+      ],
+      title: '选择LOGO图片文件'
+    });
+
+    if (!result.canceled && result.filePaths.length > 0) {
+      return { success: true, filePath: result.filePaths[0] };
+    }
+    return { success: false, error: '用户取消选择' };
+  } catch (error) {
+    console.error('选择LOGO文件时出错:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 水印文件选择
+ipcMain.handle('select-watermark-file', async () => {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: [
+        { name: '图片文件', extensions: ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'svg'] },
+        { name: '所有文件', extensions: ['*'] }
+      ],
+      title: '选择水印图片文件'
+    });
+
+    if (!result.canceled && result.filePaths.length > 0) {
+      return { success: true, filePath: result.filePaths[0] };
+    }
+    return { success: false, error: '用户取消选择' };
+  } catch (error) {
+    console.error('选择水印文件时出错:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 视频LOGO水印处理
+ipcMain.handle('process-logo-watermark-videos', async (event, { outputPath, files, options }) => {
+  try {
+    await processLogoWatermark(progressCallback, logCallback, outputPath, files, options);
+    return { success: true };
+  } catch (error) {
+    console.error('处理视频LOGO水印时出错:', error);
     return { success: false, error: error.message };
   }
 }); 

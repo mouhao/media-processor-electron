@@ -809,6 +809,8 @@ body, html {
     cursor: not-allowed;
     transform: none;
     box-shadow: none;
+    background-color: #6c757d !important;
+    color: #fff !important;
 }
 
 .btn-primary {
@@ -841,6 +843,125 @@ body, html {
 .btn-small {
     padding: 6px 12px;
     font-size: 12px;
+}
+
+/* LOGO水印功能样式 */
+.time-range-inputs {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    border: 1px solid #e9ecef;
+}
+
+.time-input-group {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+    gap: 8px;
+}
+
+.time-input-group:last-child {
+    margin-bottom: 0;
+}
+
+.time-input-group label {
+    min-width: 80px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.time-input-group input {
+    width: 80px;
+    padding: 4px 8px;
+    border: 1px solid #ced4da;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+.position-settings {
+    margin-top: 15px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 6px;
+    border: 1px solid #e9ecef;
+}
+
+.position-settings h6 {
+    margin: 0 0 12px 0;
+    color: #495057;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.position-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.position-input-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.position-input-group label {
+    min-width: 45px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #6c757d;
+}
+
+.position-input-group input {
+    flex: 1;
+    padding: 4px 6px;
+    border: 1px solid #ced4da;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+.position-input-group .unit {
+    font-size: 10px;
+    color: #6c757d;
+    min-width: 20px;
+}
+
+/* 透明度滑块样式 */
+input[type="range"] {
+    width: 100%;
+    margin: 5px 0;
+}
+
+input[type="range"]::-webkit-slider-track {
+    background: #ddd;
+    height: 6px;
+    border-radius: 3px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    background: #007bff;
+    height: 18px;
+    width: 18px;
+    border-radius: 50%;
+    cursor: pointer;
+    -webkit-appearance: none;
+}
+
+input[type="range"]::-moz-range-track {
+    background: #ddd;
+    height: 6px;
+    border-radius: 3px;
+    border: none;
+}
+
+input[type="range"]::-moz-range-thumb {
+    background: #007bff;
+    height: 18px;
+    width: 18px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
 }
 
 /* Scrollbar */

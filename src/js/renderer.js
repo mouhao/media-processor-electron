@@ -4,7 +4,14 @@ const path = require('path');
 class MediaProcessorApp {
     constructor() {
         this.currentFolder = null;
-        this.mediaFiles = { mp3: [], video: [], compose: [], 'intro-outro': [] };
+        // 每个tab独立的文件管理
+        this.tabFiles = {
+            'mp3': [],
+            'video': [],
+            'compose': [],
+            'intro-outro': [],
+            'logo-watermark': []
+        };
         this.selectedFiles = [];
         this.currentFileType = 'mp3';
         this.isProcessing = false;
@@ -19,6 +26,9 @@ class MediaProcessorApp {
         
         // 初始化配置面板
         this.updateConfigPanel(this.currentFileType);
+        
+        // 初始化按钮可用性
+        this.updateButtonAvailability(this.currentFileType);
         
         // 初始化列宽调整功能
         this.initializeColumnResizer();
@@ -174,6 +184,30 @@ class MediaProcessorApp {
         this.outroFileInput = document.getElementById('outro-file');
         this.selectIntroBtn = document.getElementById('select-intro-btn');
         this.selectOutroBtn = document.getElementById('select-outro-btn');
+        
+        // LOGO水印设置元素
+        this.addLogoRadios = document.querySelectorAll('input[name="add-logo"]');
+        this.addWatermarkRadios = document.querySelectorAll('input[name="add-watermark"]');
+        this.selectLogoBtn = document.getElementById('select-logo-btn');
+        this.selectWatermarkBtn = document.getElementById('select-watermark-btn');
+        this.logoFileInput = document.getElementById('logo-file');
+        this.watermarkFileInput = document.getElementById('watermark-file');
+        this.logoFileGroup = document.getElementById('logo-file-group');
+        this.watermarkFileGroup = document.getElementById('watermark-file-group');
+        this.logoOpacityGroup = document.getElementById('logo-opacity-group');
+        this.watermarkOpacityGroup = document.getElementById('watermark-opacity-group');
+        this.logoTimeGroup = document.getElementById('logo-time-group');
+        this.watermarkTimeGroup = document.getElementById('watermark-time-group');
+        this.logoPositionSettings = document.getElementById('logo-position-settings');
+        this.watermarkPositionSettings = document.getElementById('watermark-position-settings');
+        this.logoOpacity = document.getElementById('logo-opacity');
+        this.watermarkOpacity = document.getElementById('watermark-opacity');
+        this.logoOpacityValue = document.getElementById('logo-opacity-value');
+        this.watermarkOpacityValue = document.getElementById('watermark-opacity-value');
+        this.logoTimeModeRadios = document.querySelectorAll('input[name="logo-time-mode"]');
+        this.watermarkTimeModeRadios = document.querySelectorAll('input[name="watermark-time-mode"]');
+        this.logoTimeInputs = document.getElementById('logo-time-inputs');
+        this.watermarkTimeInputs = document.getElementById('watermark-time-inputs');
     }
 
     bindEvents() {
@@ -271,6 +305,44 @@ class MediaProcessorApp {
         if (this.selectOutroBtn) {
             this.selectOutroBtn.addEventListener('click', () => this.selectOutroFile());
         }
+        
+        // LOGO水印相关事件
+        if (this.selectLogoBtn) {
+            this.selectLogoBtn.addEventListener('click', () => this.selectLogoFile());
+        }
+        if (this.selectWatermarkBtn) {
+            this.selectWatermarkBtn.addEventListener('click', () => this.selectWatermarkFile());
+        }
+        
+        // LOGO设置切换
+        this.addLogoRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => this.toggleLogoSettings(e.target.value === 'yes'));
+        });
+        
+        // 水印设置切换
+        this.addWatermarkRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => this.toggleWatermarkSettings(e.target.value === 'yes'));
+        });
+        
+        // 透明度滑块
+        if (this.logoOpacity) {
+            this.logoOpacity.addEventListener('input', (e) => {
+                this.logoOpacityValue.textContent = Math.round(e.target.value * 100) + '%';
+            });
+        }
+        if (this.watermarkOpacity) {
+            this.watermarkOpacity.addEventListener('input', (e) => {
+                this.watermarkOpacityValue.textContent = Math.round(e.target.value * 100) + '%';
+            });
+        }
+        
+        // 时间模式切换
+        this.logoTimeModeRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => this.toggleLogoTimeInputs(e.target.value === 'custom'));
+        });
+        this.watermarkTimeModeRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => this.toggleWatermarkTimeInputs(e.target.value === 'custom'));
+        });
 
         // 监听片头片尾时长输入变化
         const introTrimInput = document.getElementById('intro-trim-seconds');
@@ -328,7 +400,7 @@ class MediaProcessorApp {
             if (result.success && result.path) {
                 this.currentFolder = result.path;
                 this.folderPath.textContent = `当前文件夹: ${result.path}`;
-                this.addLog('info', `📂 选择文件夹: ${result.path}`);
+                this.addLog('info', `📂 选择文件夹扫描到 ${this.getFileTypeName()} 标签: ${result.path}`);
                 
                 // 设置默认输出路径为源文件夹下的output文件夹
                 const defaultOutputPath = await ipcRenderer.invoke('get-default-output-path', result.path);
@@ -337,9 +409,9 @@ class MediaProcessorApp {
                     this.addLog('info', `📁 默认输出路径: ${defaultOutputPath.path}`);
                 }
                 
-                // 重置文件列表，然后扫描文件夹
-                this.mediaFiles = { mp3: [], video: [], compose: [], 'intro-outro': [] };
-                await this.scanMediaFiles();
+                // 重置当前tab的文件列表，然后扫描文件夹
+                this.tabFiles[this.currentFileType] = [];
+                await this.scanMediaFilesForCurrentTab();
             }
         } catch (error) {
             this.addLog('error', `选择文件夹失败: ${error.message}`);
@@ -348,13 +420,40 @@ class MediaProcessorApp {
 
     async selectFiles() {
         try {
-            const result = await ipcRenderer.invoke('select-files');
-            if (result.success && result.files && result.files.length > 0) {
-                this.addLog('info', `📄 选择了 ${result.files.length} 个文件`);
+            // 根据当前tab类型决定文件类型过滤
+            let filters = [];
+            if (this.currentFileType === 'mp3') {
+                filters = [
+                    { name: '音频文件', extensions: ['mp3', 'wav', 'flac', 'aac', 'm4a'] },
+                    { name: 'MP3文件', extensions: ['mp3'] },
+                    { name: '所有文件', extensions: ['*'] }
+                ];
+            } else if (['video', 'compose', 'intro-outro', 'logo-watermark'].includes(this.currentFileType)) {
+                filters = [
+                    { name: '视频文件', extensions: ['mp4', 'avi', 'mov', 'wmv', 'mkv', 'flv', 'webm'] },
+                    { name: '所有文件', extensions: ['*'] }
+                ];
+            } else {
+                // 默认支持所有媒体文件
+                filters = [
+                    { name: '媒体文件', extensions: ['mp3', 'wav', 'flac', 'aac', 'm4a', 'mp4', 'avi', 'mov', 'wmv', 'mkv', 'flv', 'webm'] },
+                    { name: '音频文件', extensions: ['mp3', 'wav', 'flac', 'aac', 'm4a'] },
+                    { name: '视频文件', extensions: ['mp4', 'avi', 'mov', 'wmv', 'mkv', 'flv', 'webm'] },
+                    { name: '所有文件', extensions: ['*'] }
+                ];
+            }
+
+            // 对于LOGO水印功能，使用单文件选择；其他功能支持多文件选择
+            const useMultiSelect = this.currentFileType !== 'logo-watermark';
+            const result = await ipcRenderer.invoke(useMultiSelect ? 'select-files-with-filter' : 'select-single-file-with-filter', filters);
+            
+            if (result.success && ((useMultiSelect && result.files && result.files.length > 0) || (!useMultiSelect && result.file))) {
+                const files = useMultiSelect ? result.files : [result.file];
+                this.addLog('info', `📄 选择了 ${files.length} 个文件到 ${this.getFileTypeName()} 标签`);
                 
                 // 如果之前没有设置当前文件夹，使用第一个文件的目录
                 if (!this.currentFolder) {
-                    const firstFilePath = result.files[0];
+                    const firstFilePath = files[0];
                     this.currentFolder = path.dirname(firstFilePath);
                 }
                 
@@ -367,13 +466,17 @@ class MediaProcessorApp {
                     }
                 }
                 
-                // 添加选中的文件到现有列表
-                await this.addSelectedFiles(result.files);
+                // LOGO水印功能：清空列表并添加新文件；其他功能：追加到列表
+                if (this.currentFileType === 'logo-watermark') {
+                    await this.replaceFilesInCurrentTab(files);
+                } else {
+                    await this.addSelectedFilesToCurrentTab(files);
+                }
                 
-                // 更新文件夹路径显示（在文件添加完成后）
-                const totalFiles = this.mediaFiles.mp3.length + this.mediaFiles.video.length;
+                // 更新文件夹路径显示
+                const totalFiles = this.tabFiles[this.currentFileType].length;
                 if (totalFiles > 0) {
-                    this.folderPath.textContent = `文件列表: ${totalFiles} 个文件`;
+                    this.folderPath.textContent = `${this.getFileTypeName()}文件列表: ${totalFiles} 个文件`;
                 }
             }
         } catch (error) {
@@ -399,9 +502,15 @@ class MediaProcessorApp {
             const result = await ipcRenderer.invoke('process-selected-files', filePaths);
             
             if (result.success) {
-                this.mediaFiles = result.files;
+                // 兼容旧的processSelectedFiles调用，将文件分配给对应的tab
+                this.tabFiles['mp3'] = result.files.mp3;
+                this.tabFiles['video'] = result.files.video;
+                this.tabFiles['compose'] = result.files.video;
+                this.tabFiles['intro-outro'] = result.files.video;
+                this.tabFiles['logo-watermark'] = result.files.video;
+                
                 this.updateFileList();
-                this.addLog('success', `✅ 处理完成: 找到 ${this.mediaFiles.mp3.length} 个MP3文件, ${this.mediaFiles.video.length} 个视频文件`);
+                this.addLog('success', `✅ 处理完成: 找到 ${result.files.mp3.length} 个MP3文件, ${result.files.video.length} 个视频文件`);
             } else {
                 this.addLog('error', `处理文件失败: ${result.error}`);
             }
@@ -410,7 +519,7 @@ class MediaProcessorApp {
         }
     }
 
-    async addSelectedFiles(filePaths) {
+    async addSelectedFilesToCurrentTab(filePaths) {
         try {
             this.addLog('info', '🔍 正在添加选中的文件...');
             const result = await ipcRenderer.invoke('process-selected-files', filePaths);
@@ -420,24 +529,19 @@ class MediaProcessorApp {
                 let addedCount = 0;
                 let duplicateCount = 0;
                 
-                // 添加MP3文件（避免重复）
-                for (const newMp3 of newFiles.mp3) {
-                    const exists = this.mediaFiles.mp3.some(existing => existing.path === newMp3.path);
-                    if (!exists) {
-                        this.mediaFiles.mp3.push(newMp3);
-                        addedCount++;
-                    } else {
-                        duplicateCount++;
-                    }
+                // 根据当前tab类型决定要添加的文件类型
+                let targetFiles = [];
+                if (this.currentFileType === 'mp3') {
+                    targetFiles = newFiles.mp3;
+                } else if (['video', 'compose', 'intro-outro', 'logo-watermark'].includes(this.currentFileType)) {
+                    targetFiles = newFiles.video;
                 }
                 
-                // 添加视频文件（避免重复）
-                for (const newVideo of newFiles.video) {
-                    const exists = this.mediaFiles.video.some(existing => existing.path === newVideo.path);
+                // 添加文件（避免重复）
+                for (const newFile of targetFiles) {
+                    const exists = this.tabFiles[this.currentFileType].some(existing => existing.path === newFile.path);
                     if (!exists) {
-                        this.mediaFiles.video.push(newVideo);
-                        this.mediaFiles.compose.push(newVideo); // 视频合成列表
-                        this.mediaFiles['intro-outro'].push(newVideo); // 片头片尾列表
+                        this.tabFiles[this.currentFileType].push(newFile);
                         addedCount++;
                     } else {
                         duplicateCount++;
@@ -448,13 +552,13 @@ class MediaProcessorApp {
                 
                 // 报告结果
                 if (addedCount > 0) {
-                    this.addLog('success', `✅ 添加完成: 新增 ${addedCount} 个文件`);
+                    this.addLog('success', `✅ 添加完成: 新增 ${addedCount} 个文件到 ${this.getFileTypeName()} 标签`);
                 }
                 if (duplicateCount > 0) {
                     this.addLog('warning', `⚠️ 跳过 ${duplicateCount} 个重复文件`);
                 }
                 if (addedCount === 0 && duplicateCount === 0) {
-                    this.addLog('info', '📄 未找到可添加的媒体文件');
+                    this.addLog('info', `📄 未找到可添加的${this.getFileTypeName()}文件`);
                 }
             } else {
                 this.addLog('error', `添加文件失败: ${result.error}`);
@@ -464,6 +568,69 @@ class MediaProcessorApp {
         }
     }
 
+    async replaceFilesInCurrentTab(filePaths) {
+        try {
+            this.addLog('info', '🔍 正在设置选中的文件...');
+            const result = await ipcRenderer.invoke('process-selected-files', filePaths);
+            
+            if (result.success) {
+                const newFiles = result.files;
+                
+                // 根据当前tab类型决定要设置的文件类型
+                let targetFiles = [];
+                if (this.currentFileType === 'mp3') {
+                    targetFiles = newFiles.mp3;
+                } else if (['video', 'compose', 'intro-outro', 'logo-watermark'].includes(this.currentFileType)) {
+                    targetFiles = newFiles.video;
+                }
+                
+                // 清空当前tab的文件列表，然后设置新文件
+                this.tabFiles[this.currentFileType] = [...targetFiles];
+                
+                this.updateFileList();
+                
+                // 报告结果
+                if (targetFiles.length > 0) {
+                    this.addLog('success', `✅ 设置完成: ${targetFiles.length} 个${this.getFileTypeName()}文件`);
+                } else {
+                    this.addLog('info', `📄 未找到可设置的${this.getFileTypeName()}文件`);
+                }
+            } else {
+                this.addLog('error', `设置文件失败: ${result.error}`);
+            }
+        } catch (error) {
+            this.addLog('error', `设置选中文件时出错: ${error.message}`);
+        }
+    }
+
+    async scanMediaFilesForCurrentTab() {
+        if (!this.currentFolder) return;
+        
+        try {
+            this.addLog('info', `🔍 正在扫描${this.getFileTypeName()}文件...`);
+            const result = await ipcRenderer.invoke('scan-media-files', this.currentFolder);
+            
+            if (result.success) {
+                // 根据当前tab类型选择对应的文件
+                if (this.currentFileType === 'mp3') {
+                    this.tabFiles[this.currentFileType] = result.files.mp3;
+                } else if (['video', 'compose', 'intro-outro', 'logo-watermark'].includes(this.currentFileType)) {
+                    this.tabFiles[this.currentFileType] = result.files.video;
+                }
+                
+                this.updateFileList();
+                const fileCount = this.tabFiles[this.currentFileType].length;
+                this.addLog('success', `✅ 扫描完成: 找到 ${fileCount} 个${this.getFileTypeName()}文件`);
+            } else {
+                this.addLog('error', `扫描失败: ${result.error}`);
+            }
+        } catch (error) {
+            this.addLog('error', `扫描文件时出错: ${error.message}`);
+        }
+    }
+
+
+
     async scanMediaFiles() {
         if (!this.currentFolder) return;
         
@@ -472,9 +639,15 @@ class MediaProcessorApp {
             const result = await ipcRenderer.invoke('scan-media-files', this.currentFolder);
             
             if (result.success) {
-                this.mediaFiles = result.files;
+                // 兼容旧的全局扫描，将所有文件类型分配给对应的tab
+                this.tabFiles['mp3'] = result.files.mp3;
+                this.tabFiles['video'] = result.files.video;
+                this.tabFiles['compose'] = result.files.video;
+                this.tabFiles['intro-outro'] = result.files.video;
+                this.tabFiles['logo-watermark'] = result.files.video;
+                
                 this.updateFileList();
-                this.addLog('success', `✅ 扫描完成: 找到 ${this.mediaFiles.mp3.length} 个MP3文件, ${this.mediaFiles.video.length} 个视频文件`);
+                this.addLog('success', `✅ 扫描完成: 找到 ${result.files.mp3.length} 个MP3文件, ${result.files.video.length} 个视频文件`);
             } else {
                 this.addLog('error', `扫描失败: ${result.error}`);
             }
@@ -493,6 +666,9 @@ class MediaProcessorApp {
         
         // 更新配置面板
         this.updateConfigPanel(type);
+        
+        // 根据tab类型控制按钮可用性
+        this.updateButtonAvailability(type);
         
         // 如果是合成视频标签页，初始化合成设置显示状态
         if (type === 'compose') {
@@ -538,9 +714,7 @@ class MediaProcessorApp {
         }
         
         // 检查是否需要获取详细信息
-        const files = (type === 'compose' || type === 'intro-outro') ? 
-            this.mediaFiles.video : 
-            this.mediaFiles[type] || [];
+        const files = this.tabFiles[type] || [];
         const needsDetails = files.some(file => 
             !file.info || file.info === '点击处理时获取详情'
         );
@@ -558,6 +732,8 @@ class MediaProcessorApp {
             this.configTitle.textContent = '视频合成配置';
         } else if (type === 'intro-outro') {
             this.configTitle.textContent = '视频片头片尾处理配置';
+        } else if (type === 'logo-watermark') {
+            this.configTitle.textContent = 'LOGO水印配置';
         }
         
         // 更新配置内容
@@ -566,15 +742,28 @@ class MediaProcessorApp {
         });
     }
 
+    updateButtonAvailability(type) {
+        // LOGO水印tab只能使用"选择文件"，其他tab两个按钮都可用
+        if (type === 'logo-watermark') {
+            this.selectFolderBtn.disabled = true;
+            this.selectFolderBtn.title = '此功能不支持文件夹扫描，请使用"选择文件"';
+            this.selectFilesBtn.disabled = false;
+            this.selectFilesBtn.title = '选择单个视频文件（每次选择会清空列表）';
+        } else {
+            this.selectFolderBtn.disabled = false;
+            this.selectFolderBtn.title = '选择文件夹扫描媒体文件（追加到列表）';
+            this.selectFilesBtn.disabled = false;
+            this.selectFilesBtn.title = '选择文件（追加到列表）';
+        }
+    }
+
     updateFileList() {
         this.renderFileList(true); // 首次渲染需要获取详细信息
     }
 
     renderFileList(loadDetails = false) {
-        // 合成视频模式和片头片尾处理模式使用video文件列表
-        const files = (this.currentFileType === 'compose' || this.currentFileType === 'intro-outro') ? 
-            this.mediaFiles.video : 
-            this.mediaFiles[this.currentFileType] || [];
+        // 使用当前tab的独立文件列表
+        const files = this.tabFiles[this.currentFileType] || [];
         this.selectedFiles = [];
         
         if (files.length === 0) {
@@ -670,15 +859,15 @@ class MediaProcessorApp {
         // 延迟1秒开始获取，避免界面卡顿
         await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // 确定实际的文件类型：合成视频模式和片头片尾处理模式使用video类型
-        const actualFileType = (this.currentFileType === 'compose' || this.currentFileType === 'intro-outro') ? 'video' : this.currentFileType;
+        // 使用当前tab的文件类型
+        const fileType = this.currentFileType === 'mp3' ? 'mp3' : 'video';
         
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
             try {
                 const result = await ipcRenderer.invoke('get-file-details', {
                     filePath: file.path,
-                    fileType: actualFileType  // 使用实际的文件类型
+                    fileType: fileType
                 });
                 
                 if (result.success) {
@@ -688,9 +877,9 @@ class MediaProcessorApp {
                         infoElement.innerHTML = result.details.info;
                     }
                     
-                    // 更新内存中的文件信息，使用正确的数组
-                    if (this.mediaFiles[actualFileType] && this.mediaFiles[actualFileType][i]) {
-                        this.mediaFiles[actualFileType][i].info = result.details.info;
+                    // 更新内存中的文件信息，使用当前tab的数组
+                    if (this.tabFiles[this.currentFileType] && this.tabFiles[this.currentFileType][i]) {
+                        this.tabFiles[this.currentFileType][i].info = result.details.info;
                     }
                 }
             } catch (error) {
@@ -787,9 +976,8 @@ class MediaProcessorApp {
     }
 
     selectAllFiles(checked) {
-        // 确定实际的文件类型：合成视频模式和片头片尾处理模式使用video类型
-        const actualFileType = (this.currentFileType === 'compose' || this.currentFileType === 'intro-outro') ? 'video' : this.currentFileType;
-        const files = this.mediaFiles[actualFileType] || [];
+        // 使用当前tab的文件列表
+        const files = this.tabFiles[this.currentFileType] || [];
         const checkboxes = this.fileList.querySelectorAll('input[type="checkbox"]');
         
         checkboxes.forEach(checkbox => {
@@ -804,15 +992,12 @@ class MediaProcessorApp {
         if (this.selectedFiles.length === 0) return;
         
         const removedCount = this.selectedFiles.length;
-        const fileType = this.currentFileType;
-        // 确定实际的文件类型：合成视频模式和片头片尾处理模式使用video类型
-        const actualFileType = (this.currentFileType === 'compose' || this.currentFileType === 'intro-outro') ? 'video' : this.currentFileType;
         
-        // 从mediaFiles中移除选中的文件
+        // 从当前tab的文件列表中移除选中的文件
         this.selectedFiles.forEach(selectedFile => {
-            const index = this.mediaFiles[actualFileType].findIndex(file => file.path === selectedFile.path);
+            const index = this.tabFiles[this.currentFileType].findIndex(file => file.path === selectedFile.path);
             if (index > -1) {
-                this.mediaFiles[actualFileType].splice(index, 1);
+                this.tabFiles[this.currentFileType].splice(index, 1);
             }
         });
         
@@ -823,14 +1008,13 @@ class MediaProcessorApp {
         this.renderFileList(false);
         
         // 记录日志
-        const fileTypeName = fileType === 'mp3' ? 'MP3' : (fileType === 'compose' || fileType === 'intro-outro' ? '视频' : '视频');
+        const fileTypeName = this.getFileTypeName();
         this.addLog('info', `🗑️ 已移除 ${removedCount} 个${fileTypeName}文件`);
     }
 
     updateSelectAllCheckbox() {
-        // 确定实际的文件类型：合成视频模式和片头片尾处理模式使用video类型
-        const actualFileType = (this.currentFileType === 'compose' || this.currentFileType === 'intro-outro') ? 'video' : this.currentFileType;
-        const files = this.mediaFiles[actualFileType] || [];
+        // 使用当前tab的文件列表
+        const files = this.tabFiles[this.currentFileType] || [];
         const checkedCount = this.selectedFiles.length;
         
         if (checkedCount === 0) {
@@ -847,9 +1031,8 @@ class MediaProcessorApp {
 
     updateFileCount() {
         const selectedCount = this.selectedFiles.length;
-        // 确定实际的文件类型：合成视频模式和片头片尾处理模式使用video类型
-        const actualFileType = (this.currentFileType === 'compose' || this.currentFileType === 'intro-outro') ? 'video' : this.currentFileType;
-        const totalCount = this.mediaFiles[actualFileType]?.length || 0;
+        // 使用当前tab的文件列表
+        const totalCount = this.tabFiles[this.currentFileType]?.length || 0;
         
         if (selectedCount === 0) {
             this.fileCountText.textContent = `共 ${totalCount} 个文件`;
@@ -888,6 +1071,8 @@ class MediaProcessorApp {
                 await this.composeVideos();
             } else if (this.currentFileType === 'intro-outro') {
                 await this.processIntroOutroVideos();
+            } else if (this.currentFileType === 'logo-watermark') {
+                await this.processLogoWatermarkVideos();
             }
         } catch (error) {
             this.addLog('error', `处理失败: ${error.message}`);
@@ -1329,6 +1514,122 @@ class MediaProcessorApp {
         }
     }
 
+    async processLogoWatermarkVideos() {
+        // 获取LOGO水印设置
+        const addLogo = document.querySelector('input[name="add-logo"]:checked').value === 'yes';
+        const addWatermark = document.querySelector('input[name="add-watermark"]:checked').value === 'yes';
+        
+        // 验证设置
+        if (!addLogo && !addWatermark) {
+            this.addLog('error', '❌ 请至少选择添加LOGO或水印');
+            return;
+        }
+
+        let logoFile = '';
+        let logoOpacity = 1;
+        let logoStartTime = 0;
+        let logoEndTime = 0;
+        let logoTimeMode = 'full';
+        let logoX = 50;
+        let logoY = 50;
+        let logoWidth = 100;
+        let logoHeight = 100;
+
+        if (addLogo) {
+            logoFile = document.getElementById('logo-file').value;
+            if (!logoFile) {
+                this.addLog('error', '❌ 请选择LOGO图片文件');
+                return;
+            }
+            logoOpacity = parseFloat(document.getElementById('logo-opacity').value) || 1;
+            logoTimeMode = document.querySelector('input[name="logo-time-mode"]:checked').value;
+            if (logoTimeMode === 'custom') {
+                logoStartTime = parseFloat(document.getElementById('logo-start-time').value) || 0;
+                logoEndTime = parseFloat(document.getElementById('logo-end-time').value) || 10;
+            }
+            logoX = parseInt(document.getElementById('logo-x').value) || 50;
+            logoY = parseInt(document.getElementById('logo-y').value) || 50;
+            logoWidth = parseInt(document.getElementById('logo-width').value) || 100;
+            logoHeight = parseInt(document.getElementById('logo-height').value) || 100;
+        }
+
+        let watermarkFile = '';
+        let watermarkOpacity = 0.7;
+        let watermarkStartTime = 0;
+        let watermarkEndTime = 0;
+        let watermarkTimeMode = 'full';
+        let watermarkX = 50;
+        let watermarkY = 200;
+        let watermarkWidth = 80;
+        let watermarkHeight = 80;
+
+        if (addWatermark) {
+            watermarkFile = document.getElementById('watermark-file').value;
+            if (!watermarkFile) {
+                this.addLog('error', '❌ 请选择水印图片文件');
+                return;
+            }
+            watermarkOpacity = parseFloat(document.getElementById('watermark-opacity').value) || 0.7;
+            watermarkTimeMode = document.querySelector('input[name="watermark-time-mode"]:checked').value;
+            if (watermarkTimeMode === 'custom') {
+                watermarkStartTime = parseFloat(document.getElementById('watermark-start-time').value) || 0;
+                watermarkEndTime = parseFloat(document.getElementById('watermark-end-time').value) || 10;
+            }
+            watermarkX = parseInt(document.getElementById('watermark-x').value) || 50;
+            watermarkY = parseInt(document.getElementById('watermark-y').value) || 200;
+            watermarkWidth = parseInt(document.getElementById('watermark-width').value) || 80;
+            watermarkHeight = parseInt(document.getElementById('watermark-height').value) || 80;
+        }
+
+        const quality = document.getElementById('logo-watermark-quality').value || 'source-match';
+
+        const options = {
+            addLogo,
+            addWatermark,
+            logoFile,
+            logoOpacity,
+            logoTimeMode,
+            logoStartTime,
+            logoEndTime,
+            logoX,
+            logoY,
+            logoWidth,
+            logoHeight,
+            watermarkFile,
+            watermarkOpacity,
+            watermarkTimeMode,
+            watermarkStartTime,
+            watermarkEndTime,
+            watermarkX,
+            watermarkY,
+            watermarkWidth,
+            watermarkHeight,
+            quality
+        };
+
+        this.addLog('info', `🏷️ 开始处理 ${this.selectedFiles.length} 个视频文件`);
+        this.addLog('info', `⚙️ 处理选项: 添加LOGO=${addLogo}, 添加水印=${addWatermark}, 质量=${quality}`);
+        
+        if (addLogo) {
+            this.addLog('info', `🎨 LOGO设置: 文件=${logoFile}, 透明度=${logoOpacity}, 位置=(${logoX},${logoY}), 大小=${logoWidth}x${logoHeight}`);
+        }
+        if (addWatermark) {
+            this.addLog('info', `🌊 水印设置: 文件=${watermarkFile}, 透明度=${watermarkOpacity}, 位置=(${watermarkX},${watermarkY}), 大小=${watermarkWidth}x${watermarkHeight}`);
+        }
+
+        const result = await ipcRenderer.invoke('process-logo-watermark-videos', {
+            outputPath: this.outputFolder.value,
+            files: this.selectedFiles,
+            options
+        });
+
+        if (result.success) {
+            this.addLog('success', `✅ 视频LOGO水印处理完成`);
+        } else {
+            this.addLog('error', `视频LOGO水印处理失败: ${result.error}`);
+        }
+    }
+
     getComposeTypeName(type) {
         const typeNames = {
             'concat': '顺序拼接',
@@ -1343,7 +1644,8 @@ class MediaProcessorApp {
             'mp3': 'MP3',
             'video': '视频',
             'compose': '视频',
-            'intro-outro': '视频'
+            'intro-outro': '视频',
+            'logo-watermark': '视频'
         };
         return typeNames[this.currentFileType] || '文件';
     }
@@ -1518,7 +1820,7 @@ class MediaProcessorApp {
         }
         
         // 获取当前文件数组
-        const files = this.mediaFiles.video || [];
+        const files = this.tabFiles[this.currentFileType] || [];
         
         if (fromIndex < 0 || fromIndex >= files.length || 
             toIndex < 0 || toIndex > files.length || 
@@ -1658,6 +1960,74 @@ class MediaProcessorApp {
         const sizes = ['B', 'KB', 'MB', 'GB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+    // LOGO水印功能相关方法
+    async selectLogoFile() {
+        try {
+            const result = await ipcRenderer.invoke('select-logo-file');
+            if (result.success && result.filePath) {
+                this.logoFileInput.value = result.filePath;
+                this.addLog('info', `🎨 选择LOGO: ${path.basename(result.filePath)}`);
+                // TODO: 在下一阶段实现LOGO预览
+            }
+        } catch (error) {
+            this.addLog('error', '选择LOGO文件失败: ' + error.message);
+        }
+    }
+
+    async selectWatermarkFile() {
+        try {
+            const result = await ipcRenderer.invoke('select-watermark-file');
+            if (result.success && result.filePath) {
+                this.watermarkFileInput.value = result.filePath;
+                this.addLog('info', `🌊 选择水印: ${path.basename(result.filePath)}`);
+                // TODO: 在下一阶段实现水印预览
+            }
+        } catch (error) {
+            this.addLog('error', '选择水印文件失败: ' + error.message);
+        }
+    }
+
+    toggleLogoSettings(enabled) {
+        if (this.logoFileGroup) {
+            this.logoFileGroup.style.display = enabled ? 'block' : 'none';
+        }
+        if (this.logoOpacityGroup) {
+            this.logoOpacityGroup.style.display = enabled ? 'block' : 'none';
+        }
+        if (this.logoTimeGroup) {
+            this.logoTimeGroup.style.display = enabled ? 'block' : 'none';
+        }
+        if (this.logoPositionSettings) {
+            this.logoPositionSettings.style.display = enabled ? 'block' : 'none';
+        }
+    }
+
+    toggleWatermarkSettings(enabled) {
+        if (this.watermarkFileGroup) {
+            this.watermarkFileGroup.style.display = enabled ? 'block' : 'none';
+        }
+        if (this.watermarkOpacityGroup) {
+            this.watermarkOpacityGroup.style.display = enabled ? 'block' : 'none';
+        }
+        if (this.watermarkTimeGroup) {
+            this.watermarkTimeGroup.style.display = enabled ? 'block' : 'none';
+        }
+        if (this.watermarkPositionSettings) {
+            this.watermarkPositionSettings.style.display = enabled ? 'block' : 'none';
+        }
+    }
+
+    toggleLogoTimeInputs(enabled) {
+        if (this.logoTimeInputs) {
+            this.logoTimeInputs.style.display = enabled ? 'block' : 'none';
+        }
+    }
+
+    toggleWatermarkTimeInputs(enabled) {
+        if (this.watermarkTimeInputs) {
+            this.watermarkTimeInputs.style.display = enabled ? 'block' : 'none';
+        }
     }
 }
 
