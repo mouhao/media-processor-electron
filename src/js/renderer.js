@@ -113,6 +113,7 @@ class MediaProcessorApp {
     initializeElements() {
         // 按钮和输入元素
         this.selectFolderBtn = document.getElementById('select-folder-btn');
+        this.selectFilesBtn = document.getElementById('select-files-btn');
         this.processBtn = document.getElementById('processBtn');
         this.removeSelectedBtn = document.getElementById('removeSelectedBtn');
         this.selectAllCheckbox = document.getElementById('selectAllCheckbox');
@@ -126,6 +127,7 @@ class MediaProcessorApp {
         this.progressFill = document.getElementById('progress-fill');
         this.progressText = document.getElementById('progress-text');
         this.progressSpinner = document.getElementById('progress-spinner');
+        this.clearLogBtn = document.getElementById('clear-log-btn');
         
         // 进度条动画相关属性
         this.simulatedProgress = 0;
@@ -178,8 +180,14 @@ class MediaProcessorApp {
         // 文件夹选择
         this.selectFolderBtn.addEventListener('click', () => this.selectFolder());
         
+        // 文件选择
+        this.selectFilesBtn.addEventListener('click', () => this.selectFiles());
+        
         // 输出文件夹选择
         this.selectOutputBtn.addEventListener('click', () => this.selectOutputFolder());
+        
+        // 清除日志按钮
+        this.clearLogBtn.addEventListener('click', () => this.clearLog());
         
         // 处理按钮
         this.processBtn.addEventListener('click', () => this.startProcessing());
@@ -329,10 +337,47 @@ class MediaProcessorApp {
                     this.addLog('info', `📁 默认输出路径: ${defaultOutputPath.path}`);
                 }
                 
+                // 重置文件列表，然后扫描文件夹
+                this.mediaFiles = { mp3: [], video: [], compose: [], 'intro-outro': [] };
                 await this.scanMediaFiles();
             }
         } catch (error) {
             this.addLog('error', `选择文件夹失败: ${error.message}`);
+        }
+    }
+
+    async selectFiles() {
+        try {
+            const result = await ipcRenderer.invoke('select-files');
+            if (result.success && result.files && result.files.length > 0) {
+                this.addLog('info', `📄 选择了 ${result.files.length} 个文件`);
+                
+                // 如果之前没有设置当前文件夹，使用第一个文件的目录
+                if (!this.currentFolder) {
+                    const firstFilePath = result.files[0];
+                    this.currentFolder = path.dirname(firstFilePath);
+                }
+                
+                // 如果没有设置输出路径，设置默认输出路径
+                if (!this.outputFolder.value) {
+                    const defaultOutputPath = await ipcRenderer.invoke('get-default-output-path', this.currentFolder);
+                    if (defaultOutputPath.success) {
+                        this.outputFolder.value = defaultOutputPath.path;
+                        this.addLog('info', `📁 默认输出路径: ${defaultOutputPath.path}`);
+                    }
+                }
+                
+                // 添加选中的文件到现有列表
+                await this.addSelectedFiles(result.files);
+                
+                // 更新文件夹路径显示（在文件添加完成后）
+                const totalFiles = this.mediaFiles.mp3.length + this.mediaFiles.video.length;
+                if (totalFiles > 0) {
+                    this.folderPath.textContent = `文件列表: ${totalFiles} 个文件`;
+                }
+            }
+        } catch (error) {
+            this.addLog('error', `选择文件失败: ${error.message}`);
         }
     }
 
@@ -345,6 +390,77 @@ class MediaProcessorApp {
             }
         } catch (error) {
             this.addLog('error', `选择输出文件夹失败: ${error.message}`);
+        }
+    }
+
+    async processSelectedFiles(filePaths) {
+        try {
+            this.addLog('info', '🔍 正在处理选中的文件...');
+            const result = await ipcRenderer.invoke('process-selected-files', filePaths);
+            
+            if (result.success) {
+                this.mediaFiles = result.files;
+                this.updateFileList();
+                this.addLog('success', `✅ 处理完成: 找到 ${this.mediaFiles.mp3.length} 个MP3文件, ${this.mediaFiles.video.length} 个视频文件`);
+            } else {
+                this.addLog('error', `处理文件失败: ${result.error}`);
+            }
+        } catch (error) {
+            this.addLog('error', `处理选中文件时出错: ${error.message}`);
+        }
+    }
+
+    async addSelectedFiles(filePaths) {
+        try {
+            this.addLog('info', '🔍 正在添加选中的文件...');
+            const result = await ipcRenderer.invoke('process-selected-files', filePaths);
+            
+            if (result.success) {
+                const newFiles = result.files;
+                let addedCount = 0;
+                let duplicateCount = 0;
+                
+                // 添加MP3文件（避免重复）
+                for (const newMp3 of newFiles.mp3) {
+                    const exists = this.mediaFiles.mp3.some(existing => existing.path === newMp3.path);
+                    if (!exists) {
+                        this.mediaFiles.mp3.push(newMp3);
+                        addedCount++;
+                    } else {
+                        duplicateCount++;
+                    }
+                }
+                
+                // 添加视频文件（避免重复）
+                for (const newVideo of newFiles.video) {
+                    const exists = this.mediaFiles.video.some(existing => existing.path === newVideo.path);
+                    if (!exists) {
+                        this.mediaFiles.video.push(newVideo);
+                        this.mediaFiles.compose.push(newVideo); // 视频合成列表
+                        this.mediaFiles['intro-outro'].push(newVideo); // 片头片尾列表
+                        addedCount++;
+                    } else {
+                        duplicateCount++;
+                    }
+                }
+                
+                this.updateFileList();
+                
+                // 报告结果
+                if (addedCount > 0) {
+                    this.addLog('success', `✅ 添加完成: 新增 ${addedCount} 个文件`);
+                }
+                if (duplicateCount > 0) {
+                    this.addLog('warning', `⚠️ 跳过 ${duplicateCount} 个重复文件`);
+                }
+                if (addedCount === 0 && duplicateCount === 0) {
+                    this.addLog('info', '📄 未找到可添加的媒体文件');
+                }
+            } else {
+                this.addLog('error', `添加文件失败: ${result.error}`);
+            }
+        } catch (error) {
+            this.addLog('error', `添加选中文件时出错: ${error.message}`);
         }
     }
 
@@ -1016,6 +1132,11 @@ class MediaProcessorApp {
         
         this.logContent.appendChild(logEntry);
         this.logContent.scrollTop = this.logContent.scrollHeight;
+    }
+
+    clearLog() {
+        this.logContent.innerHTML = '';
+        this.addLog('info', '🧹 日志已清除');
     }
 
     async composeVideos() {

@@ -592,6 +592,12 @@ body, html {
     background-color: #f8f9fa;
 }
 
+.progress-title-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
 .progress-header h4 {
     margin: 0;
     color: #333;
@@ -830,6 +836,11 @@ body, html {
 
 .btn-danger:hover:not(:disabled) {
     background-color: #c82333;
+}
+
+.btn-small {
+    padding: 6px 12px;
+    font-size: 12px;
 }
 
 /* Scrollbar */

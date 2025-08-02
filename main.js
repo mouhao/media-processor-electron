@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs').promises;
 
 // 导入新的处理器模块
-const { checkFfmpeg, scanMediaFiles, getFileDetails } = require('./src/js/processors/common-processor.js');
+const { checkFfmpeg, scanMediaFiles, processSelectedFiles, getFileDetails } = require('./src/js/processors/common-processor.js');
 const { processMp3Files } = require('./src/js/processors/mp3-processor.js');
 const { processVideoFiles } = require('./src/js/processors/video-processor.js');
 const { composeVideos } = require('./src/js/processors/video-composer.js');
@@ -106,6 +106,26 @@ ipcMain.handle('select-folder', async () => {
   return { success: true, path: result.filePaths[0] };
 });
 
+// 选择文件对话框
+ipcMain.handle('select-files', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile', 'multiSelections'],
+    title: '选择要处理的文件',
+    filters: [
+      { name: '媒体文件', extensions: ['mp3', 'wav', 'flac', 'aac', 'm4a', 'mp4', 'avi', 'mov', 'wmv', 'mkv', 'flv', 'webm'] },
+      { name: '音频文件', extensions: ['mp3', 'wav', 'flac', 'aac', 'm4a'] },
+      { name: '视频文件', extensions: ['mp4', 'avi', 'mov', 'wmv', 'mkv', 'flv', 'webm'] },
+      { name: '所有文件', extensions: ['*'] }
+    ]
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return { success: false, files: [] };
+  }
+
+  return { success: true, files: result.filePaths };
+});
+
 // 扫描文件夹中的媒体文件
 ipcMain.handle('scan-media-files', async (event, folderPath) => {
   try {
@@ -113,6 +133,17 @@ ipcMain.handle('scan-media-files', async (event, folderPath) => {
     return { success: true, files };
   } catch (error) {
     console.error('扫描媒体文件时出错:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 处理选中的文件
+ipcMain.handle('process-selected-files', async (event, filePaths) => {
+  try {
+    const files = await processSelectedFiles(filePaths);
+    return { success: true, files };
+  } catch (error) {
+    console.error('处理选中文件时出错:', error);
     return { success: false, error: error.message };
   }
 });

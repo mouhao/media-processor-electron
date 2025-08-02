@@ -168,6 +168,54 @@ async function scanMediaFiles(folderPath) {
     }
 }
 
+// 处理选中的文件列表
+async function processSelectedFiles(filePaths) {
+    const mp3Files = [];
+    const videoFiles = [];
+
+    const mp3Extensions = ['.mp3', '.wav', '.flac', '.aac', '.m4a'];
+    const videoExtensions = ['.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm'];
+
+    try {
+        for (const filePath of filePaths) {
+            const ext = path.extname(filePath).toLowerCase();
+            const fileName = path.basename(filePath);
+            
+            // 检查文件是否存在
+            try {
+                const stats = await fs.stat(filePath);
+                
+                if (mp3Extensions.includes(ext)) {
+                    mp3Files.push({ 
+                        name: fileName, 
+                        path: filePath, 
+                        size: stats.size, 
+                        info: '点击处理时获取详情' 
+                    });
+                } else if (videoExtensions.includes(ext)) {
+                    videoFiles.push({ 
+                        name: fileName, 
+                        path: filePath, 
+                        size: stats.size, 
+                        info: '点击处理时获取详情' 
+                    });
+                }
+            } catch (error) {
+                console.warn(`无法访问文件: ${filePath}, 错误: ${error.message}`);
+            }
+        }
+
+        return {
+            mp3: mp3Files,
+            video: videoFiles,
+            compose: videoFiles, // 视频合成使用相同的视频列表
+            'intro-outro': videoFiles // 片头片尾处理也使用视频列表
+        };
+    } catch (error) {
+        throw new Error(`处理选中文件失败: ${error.message}`);
+    }
+}
+
 // 递归扫描目录
 async function scanDirectory(dirPath, mp3Extensions, videoExtensions, mp3Files, videoFiles) {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
@@ -459,6 +507,7 @@ module.exports = {
     reportProgress,
     checkFfmpeg,
     scanMediaFiles,
+    processSelectedFiles,
     getFileDetails,
     getMp3Bitrate,
     generateUniqueFilename,
