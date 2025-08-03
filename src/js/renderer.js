@@ -1,6 +1,11 @@
 const { ipcRenderer } = require('electron');
 const path = require('path');
 
+// 防御性编程：确保全局拖拽事件变量不会导致错误
+if (typeof window !== 'undefined' && !window.dragEvent) {
+    window.dragEvent = null;
+}
+
 class MediaProcessorApp {
     constructor() {
         this.currentFolder = null;
