@@ -36,6 +36,51 @@
                     </div>
                 </div>
 
+                <!-- 可滚动内容区域 -->
+                <div class="scrollable-content">
+                    <!-- 视频预览器 (仅在LOGO水印模式下显示) -->
+                <div id="video-preview-container" class="video-preview-container" style="display: none;">
+                    
+                    <div class="video-player-wrapper">
+                        <video id="video-preview-player" class="video-player" controls>
+                            <source src="" type="video/mp4">
+                            您的浏览器不支持视频播放
+                        </video>
+                        
+                        <!-- LOGO和水印覆盖层 -->
+                        <div id="video-overlay" class="video-overlay">
+                            <!-- LOGO元素 -->
+                            <div id="logo-overlay" class="overlay-element logo-element" style="display: none;">
+                                <img id="logo-preview-img" src="" alt="LOGO预览">
+                                <div class="resize-handles">
+                                    <div class="resize-handle nw"></div>
+                                    <div class="resize-handle ne"></div>
+                                    <div class="resize-handle sw"></div>
+                                    <div class="resize-handle se"></div>
+                                </div>
+                            </div>
+                            
+                            <!-- 水印元素 -->
+                            <div id="watermark-overlay" class="overlay-element watermark-element" style="display: none;">
+                                <img id="watermark-preview-img" src="" alt="水印预览">
+                                <div class="resize-handles">
+                                    <div class="resize-handle nw"></div>
+                                    <div class="resize-handle ne"></div>
+                                    <div class="resize-handle sw"></div>
+                                    <div class="resize-handle se"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 视频实际显示区域指示器 -->
+                        <div id="video-display-indicator" class="video-display-indicator" style="display: none;"></div>
+                    </div>
+                    
+                    <div class="preview-info">
+                        <span id="video-info">请选择视频文件进行预览</span>
+                    </div>
+                </div>
+
                 <div class="file-list-header">
                     <div class="header-order" style="display: none;">序号</div>
                     <div class="header-select">
@@ -54,7 +99,9 @@
                         <p>请选择文件夹扫描媒体文件</p>
                     </div>
                 </div>
+                </div>
 
+                <!-- 固定底部栏 -->
                 <div class="bottom-bar">
                     <div class="file-count">
                         <span id="file-count-text">未选择文件</span>

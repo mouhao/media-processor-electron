@@ -208,6 +208,43 @@ class MediaProcessorApp {
         this.watermarkTimeModeRadios = document.querySelectorAll('input[name="watermark-time-mode"]');
         this.logoTimeInputs = document.getElementById('logo-time-inputs');
         this.watermarkTimeInputs = document.getElementById('watermark-time-inputs');
+        
+        // 视频预览器元素
+        this.videoPreviewContainer = document.getElementById('video-preview-container');
+        this.videoPreviewPlayer = document.getElementById('video-preview-player');
+        this.previewPlayPause = document.getElementById('preview-play-pause');
+        this.previewTime = document.getElementById('preview-time');
+        this.videoOverlay = document.getElementById('video-overlay');
+        this.logoOverlay = document.getElementById('logo-overlay');
+        this.watermarkOverlay = document.getElementById('watermark-overlay');
+        this.logoPreviewImg = document.getElementById('logo-preview-img');
+        this.watermarkPreviewImg = document.getElementById('watermark-preview-img');
+        this.videoInfo = document.getElementById('video-info');
+        this.videoDisplayIndicator = document.getElementById('video-display-indicator');
+        
+        // 位置控制输入框
+        this.logoXInput = document.getElementById('logo-x');
+        this.logoYInput = document.getElementById('logo-y');
+        this.logoWidthInput = document.getElementById('logo-width');
+        this.logoHeightInput = document.getElementById('logo-height');
+        this.watermarkXInput = document.getElementById('watermark-x');
+        this.watermarkYInput = document.getElementById('watermark-y');
+        this.watermarkWidthInput = document.getElementById('watermark-width');
+        this.watermarkHeightInput = document.getElementById('watermark-height');
+        
+        // 拖拽状态
+        this.isDragging = false;
+        this.isResizing = false;
+        this.dragElement = null;
+        this.dragStartPos = { x: 0, y: 0 };
+        this.elementStartPos = { x: 0, y: 0 };
+        this.resizeHandle = null;
+        this.resizeStartSize = { width: 0, height: 0 };
+        
+        // 视频尺寸和坐标转换
+        this.videoRealSize = { width: 0, height: 0 }; // 视频真实分辨率
+        this.videoDisplaySize = { width: 0, height: 0 }; // 视频在播放器中的实际显示尺寸
+        this.videoDisplayOffset = { x: 0, y: 0 }; // 视频在播放器中的偏移位置
     }
 
     bindEvents() {
@@ -343,6 +380,28 @@ class MediaProcessorApp {
         this.watermarkTimeModeRadios.forEach(radio => {
             radio.addEventListener('change', (e) => this.toggleWatermarkTimeInputs(e.target.value === 'custom'));
         });
+        
+        // 视频预览器事件
+        if (this.previewPlayPause) {
+            this.previewPlayPause.addEventListener('click', () => this.toggleVideoPlayback());
+        }
+        if (this.videoPreviewPlayer) {
+            this.videoPreviewPlayer.addEventListener('timeupdate', () => this.updateVideoTime());
+            this.videoPreviewPlayer.addEventListener('loadedmetadata', () => this.onVideoLoaded());
+        }
+        
+        // 拖拽和缩放事件
+        this.initializeDragAndResize();
+        
+        // 位置输入框变化事件
+        if (this.logoXInput) this.logoXInput.addEventListener('input', () => this.updateOverlayFromInputs('logo'));
+        if (this.logoYInput) this.logoYInput.addEventListener('input', () => this.updateOverlayFromInputs('logo'));
+        if (this.logoWidthInput) this.logoWidthInput.addEventListener('input', () => this.updateOverlayFromInputs('logo'));
+        if (this.logoHeightInput) this.logoHeightInput.addEventListener('input', () => this.updateOverlayFromInputs('logo'));
+        if (this.watermarkXInput) this.watermarkXInput.addEventListener('input', () => this.updateOverlayFromInputs('watermark'));
+        if (this.watermarkYInput) this.watermarkYInput.addEventListener('input', () => this.updateOverlayFromInputs('watermark'));
+        if (this.watermarkWidthInput) this.watermarkWidthInput.addEventListener('input', () => this.updateOverlayFromInputs('watermark'));
+        if (this.watermarkHeightInput) this.watermarkHeightInput.addEventListener('input', () => this.updateOverlayFromInputs('watermark'));
 
         // 监听片头片尾时长输入变化
         const introTrimInput = document.getElementById('intro-trim-seconds');
@@ -587,7 +646,17 @@ class MediaProcessorApp {
                 // 清空当前tab的文件列表，然后设置新文件
                 this.tabFiles[this.currentFileType] = [...targetFiles];
                 
+                // 在LOGO水印模式下，先清空选中状态，让renderFileList自动选中第一个文件
+                if (this.currentFileType === 'logo-watermark') {
+                    this.selectedFiles = [];
+                }
+                
                 this.updateFileList();
+                
+                // 如果是LOGO水印模式且有文件，自动加载到视频预览器
+                if (this.currentFileType === 'logo-watermark' && targetFiles.length > 0) {
+                    this.loadVideoPreview(targetFiles[0]);
+                }
                 
                 // 报告结果
                 if (targetFiles.length > 0) {
@@ -659,6 +728,12 @@ class MediaProcessorApp {
     switchFileTab(type) {
         this.currentFileType = type;
         
+        // 更新left-panel的data属性，便于CSS样式控制
+        const leftPanel = document.querySelector('.left-panel');
+        if (leftPanel) {
+            leftPanel.setAttribute('data-current-type', type);
+        }
+        
         // 更新标签页状态
         this.fileTabs.forEach(tab => {
             tab.classList.toggle('active', tab.dataset.type === type);
@@ -703,6 +778,19 @@ class MediaProcessorApp {
             }
         }
         
+        // 控制视频预览器显示（只在LOGO水印模式下显示）
+        if (type === 'logo-watermark') {
+            this.showVideoPreview();
+            // 如果有选中的视频文件，自动加载到预览器
+            const files = this.tabFiles[type] || [];
+            if (files.length > 0) {
+                this.loadVideoPreview(files[0]);
+                // 注意：自动选中逻辑将在renderFileList之后执行
+            }
+        } else {
+            this.hideVideoPreview();
+        }
+        
         // 控制序号列显示（只在合成模式下显示）
         const headerOrder = document.querySelector('.header-order');
         if (headerOrder) {
@@ -711,6 +799,17 @@ class MediaProcessorApp {
             } else {
                 headerOrder.style.display = 'none';
             }
+        }
+        
+        // 控制file-list-header和file-list显示（在LOGO水印模式下隐藏）
+        const fileListHeader = document.querySelector('.file-list-header');
+        const fileListElement = document.querySelector('.file-list');
+        if (type === 'logo-watermark') {
+            if (fileListHeader) fileListHeader.style.display = 'none';
+            if (fileListElement) fileListElement.style.display = 'none';
+        } else {
+            if (fileListHeader) fileListHeader.style.display = 'flex';
+            if (fileListElement) fileListElement.style.display = 'block';
         }
         
         // 检查是否需要获取详细信息
@@ -764,7 +863,14 @@ class MediaProcessorApp {
     renderFileList(loadDetails = false) {
         // 使用当前tab的独立文件列表
         const files = this.tabFiles[this.currentFileType] || [];
-        this.selectedFiles = [];
+        
+        // 在LOGO水印模式下，如果有文件且当前没有选中文件，自动选中第一个
+        if (this.currentFileType === 'logo-watermark' && files.length > 0 && this.selectedFiles.length === 0) {
+            this.selectedFiles = [files[0]];
+        } else if (this.currentFileType !== 'logo-watermark') {
+            // 其他模式清空选中状态
+            this.selectedFiles = [];
+        }
         
         if (files.length === 0) {
             this.fileList.innerHTML = `
@@ -828,6 +934,14 @@ class MediaProcessorApp {
                 this.updateFileCount();
                 this.updateSelectAllCheckbox();
             });
+            
+            // 在logo-watermark模式下，如果文件在selectedFiles中，设置为选中状态
+            if (this.currentFileType === 'logo-watermark') {
+                const index = parseInt(checkbox.dataset.index);
+                const file = files[index];
+                const isSelected = this.selectedFiles.some(f => f.path === file.path);
+                checkbox.checked = isSelected;
+            }
         });
         
         // 为视频合成模式添加拖拽排序功能（仅在非加载状态时启用）
@@ -1003,6 +1117,29 @@ class MediaProcessorApp {
         
         // 清空选中列表
         this.selectedFiles = [];
+        
+        // 在LOGO水印模式下，如果移除后没有文件了，清空视频预览器
+        if (this.currentFileType === 'logo-watermark') {
+            const remainingFiles = this.tabFiles[this.currentFileType] || [];
+            if (remainingFiles.length === 0) {
+                // 清空视频预览器
+                if (this.videoPreviewPlayer) {
+                    this.videoPreviewPlayer.src = '';
+                    this.videoPreviewPlayer.load();
+                }
+                if (this.videoInfo) {
+                    this.videoInfo.textContent = '请选择视频文件进行预览';
+                }
+                // 隐藏LOGO和水印覆盖层
+                if (this.logoOverlay) this.logoOverlay.style.display = 'none';
+                if (this.watermarkOverlay) this.watermarkOverlay.style.display = 'none';
+                if (this.videoDisplayIndicator) this.videoDisplayIndicator.style.display = 'none';
+            } else {
+                // 如果还有剩余文件，加载第一个文件到预览器并选中
+                this.loadVideoPreview(remainingFiles[0]);
+                this.selectedFiles = [remainingFiles[0]];
+            }
+        }
         
         // 重新渲染文件列表（不重新获取文件信息）
         this.renderFileList(false);
@@ -1547,6 +1684,7 @@ class MediaProcessorApp {
                 logoStartTime = parseFloat(document.getElementById('logo-start-time').value) || 0;
                 logoEndTime = parseFloat(document.getElementById('logo-end-time').value) || 10;
             }
+            // 从输入框获取坐标（这些已经是基于视频真实分辨率的坐标）
             logoX = parseInt(document.getElementById('logo-x').value) || 50;
             logoY = parseInt(document.getElementById('logo-y').value) || 50;
             logoWidth = parseInt(document.getElementById('logo-width').value) || 100;
@@ -1575,6 +1713,7 @@ class MediaProcessorApp {
                 watermarkStartTime = parseFloat(document.getElementById('watermark-start-time').value) || 0;
                 watermarkEndTime = parseFloat(document.getElementById('watermark-end-time').value) || 10;
             }
+            // 从输入框获取坐标（这些已经是基于视频真实分辨率的坐标）
             watermarkX = parseInt(document.getElementById('watermark-x').value) || 50;
             watermarkY = parseInt(document.getElementById('watermark-y').value) || 200;
             watermarkWidth = parseInt(document.getElementById('watermark-width').value) || 80;
@@ -1968,7 +2107,14 @@ class MediaProcessorApp {
             if (result.success && result.filePath) {
                 this.logoFileInput.value = result.filePath;
                 this.addLog('info', `🎨 选择LOGO: ${path.basename(result.filePath)}`);
-                // TODO: 在下一阶段实现LOGO预览
+                
+                // 更新LOGO预览
+                this.updateLogoPreview(result.filePath);
+                
+                // 显示LOGO位置设置
+                if (this.logoPositionSettings) {
+                    this.logoPositionSettings.style.display = 'block';
+                }
             }
         } catch (error) {
             this.addLog('error', '选择LOGO文件失败: ' + error.message);
@@ -1981,7 +2127,14 @@ class MediaProcessorApp {
             if (result.success && result.filePath) {
                 this.watermarkFileInput.value = result.filePath;
                 this.addLog('info', `🌊 选择水印: ${path.basename(result.filePath)}`);
-                // TODO: 在下一阶段实现水印预览
+                
+                // 更新水印预览
+                this.updateWatermarkPreview(result.filePath);
+                
+                // 显示水印位置设置
+                if (this.watermarkPositionSettings) {
+                    this.watermarkPositionSettings.style.display = 'block';
+                }
             }
         } catch (error) {
             this.addLog('error', '选择水印文件失败: ' + error.message);
@@ -1999,8 +2152,18 @@ class MediaProcessorApp {
             this.logoTimeGroup.style.display = enabled ? 'block' : 'none';
         }
         if (this.logoPositionSettings) {
-            this.logoPositionSettings.style.display = enabled ? 'block' : 'none';
+            // 只在启用且已选择文件时显示位置设置
+            const hasLogoFile = this.logoFileInput && this.logoFileInput.value;
+            this.logoPositionSettings.style.display = (enabled && hasLogoFile) ? 'block' : 'none';
         }
+        
+        // 控制LOGO预览显示
+        if (this.logoOverlay) {
+            this.logoOverlay.style.display = enabled ? 'block' : 'none';
+        }
+        
+        // 更新视频显示区域指示器样式
+        this.updateVideoDisplayIndicator();
     }
 
     toggleWatermarkSettings(enabled) {
@@ -2014,8 +2177,18 @@ class MediaProcessorApp {
             this.watermarkTimeGroup.style.display = enabled ? 'block' : 'none';
         }
         if (this.watermarkPositionSettings) {
-            this.watermarkPositionSettings.style.display = enabled ? 'block' : 'none';
+            // 只在启用且已选择文件时显示位置设置
+            const hasWatermarkFile = this.watermarkFileInput && this.watermarkFileInput.value;
+            this.watermarkPositionSettings.style.display = (enabled && hasWatermarkFile) ? 'block' : 'none';
         }
+        
+        // 控制水印预览显示
+        if (this.watermarkOverlay) {
+            this.watermarkOverlay.style.display = enabled ? 'block' : 'none';
+        }
+        
+        // 更新视频显示区域指示器样式
+        this.updateVideoDisplayIndicator();
     }
 
     toggleLogoTimeInputs(enabled) {
@@ -2027,6 +2200,624 @@ class MediaProcessorApp {
     toggleWatermarkTimeInputs(enabled) {
         if (this.watermarkTimeInputs) {
             this.watermarkTimeInputs.style.display = enabled ? 'block' : 'none';
+        }
+    }
+
+    // ================================
+    // 视频预览器功能
+    // ================================
+
+    // 显示/隐藏视频预览器
+    showVideoPreview() {
+        if (this.videoPreviewContainer) {
+            this.videoPreviewContainer.style.display = 'block';
+        }
+    }
+
+    hideVideoPreview() {
+        if (this.videoPreviewContainer) {
+            this.videoPreviewContainer.style.display = 'none';
+        }
+        if (this.videoDisplayIndicator) {
+            this.videoDisplayIndicator.style.display = 'none';
+        }
+    }
+
+    // 加载视频到预览器
+    async loadVideoPreview(videoFile) {
+        if (!this.videoPreviewPlayer || !videoFile) return;
+        
+        // 创建blob URL用于预览
+        const videoUrl = URL.createObjectURL(new File([videoFile.path], videoFile.name, { type: 'video/mp4' }));
+        
+        // 尝试直接使用文件路径（在Electron环境中）
+        this.videoPreviewPlayer.src = `file://${videoFile.path}`;
+        
+        // 显示基本信息
+        this.videoInfo.innerHTML = `
+            <div style="color: #333; font-weight: 500; margin-bottom: 4px;">${videoFile.name}</div>
+            <div style="color: #666; font-size: 0.92em;">
+                ${this.formatFileSize(videoFile.size)}, 正在获取详细信息...
+            </div>
+        `;
+        
+        // 确保视频加载
+        this.videoPreviewPlayer.load();
+        
+        // 获取详细信息并更新显示
+        try {
+            const result = await ipcRenderer.invoke('get-file-details', {
+                filePath: videoFile.path,
+                fileType: 'video'
+            });
+            
+            if (result.success && result.details.info) {
+                // 格式化详细信息：将换行符、竖线等分隔符都替换为逗号
+                let detailInfo = result.details.info
+                    .replace(/\n+/g, ', ')           // 换行符替换为逗号
+                    .replace(/\s*\|\s*/g, ', ')      // 竖线替换为逗号  
+                    .replace(/,\s*,+/g, ', ')        // 去除重复逗号
+                    .replace(/^,\s*|,\s*$/g, '')     // 去除开头和结尾的逗号
+                    .replace(/\s+/g, ' ')            // 多个空格替换为单个空格
+                    .trim();
+                
+                this.videoInfo.innerHTML = `
+                    <div style="color: #333; font-weight: 500; margin-bottom: 4px;">${videoFile.name}</div>
+                    <div style="color: #666; font-size: 0.92em;">
+                        ${this.formatFileSize(videoFile.size)}, ${detailInfo}
+                    </div>
+                `;
+            } else {
+                this.videoInfo.innerHTML = `
+                    <div style="color: #333; font-weight: 500; margin-bottom: 4px;">${videoFile.name}</div>
+                    <div style="color: #666; font-size: 0.92em;">
+                        ${this.formatFileSize(videoFile.size)}, 无法获取详细信息
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('获取视频详细信息失败:', error);
+            this.videoInfo.innerHTML = `
+                <div style="color: #333; font-weight: 500; margin-bottom: 4px;">${videoFile.name}</div>
+                <div style="color: #666; font-size: 0.92em;">
+                    ${this.formatFileSize(videoFile.size)}, 获取信息失败
+                </div>
+            `;
+        }
+    }
+
+    // 切换视频播放/暂停
+    toggleVideoPlayback() {
+        if (!this.videoPreviewPlayer) return;
+        
+        if (this.videoPreviewPlayer.paused) {
+            this.videoPreviewPlayer.play();
+            this.previewPlayPause.textContent = '⏸️';
+        } else {
+            this.videoPreviewPlayer.pause();
+            this.previewPlayPause.textContent = '▶️';
+        }
+    }
+
+    // 更新视频时间显示
+    updateVideoTime() {
+        if (!this.videoPreviewPlayer || !this.previewTime) return;
+        
+        const current = this.videoPreviewPlayer.currentTime;
+        const duration = this.videoPreviewPlayer.duration || 0;
+        
+        const currentStr = this.formatTime(current);
+        const durationStr = this.formatTime(duration);
+        
+        this.previewTime.textContent = `${currentStr} / ${durationStr}`;
+    }
+
+    // 视频加载完成事件
+    onVideoLoaded() {
+        this.updateVideoTime();
+        this.calculateVideoDisplayInfo();
+        this.addLog('info', '📹 视频预览加载完成');
+    }
+
+    // 计算视频在播放器中的实际显示信息
+    calculateVideoDisplayInfo() {
+        if (!this.videoPreviewPlayer) return;
+        
+        // 获取视频真实分辨率
+        this.videoRealSize.width = this.videoPreviewPlayer.videoWidth;
+        this.videoRealSize.height = this.videoPreviewPlayer.videoHeight;
+        
+        // 获取播放器容器尺寸
+        const playerRect = this.videoPreviewPlayer.getBoundingClientRect();
+        const containerWidth = playerRect.width;
+        const containerHeight = playerRect.height;
+        
+        // 计算视频在容器中的实际显示尺寸（object-fit: contain 的效果）
+        const videoAspectRatio = this.videoRealSize.width / this.videoRealSize.height;
+        const containerAspectRatio = containerWidth / containerHeight;
+        
+        if (videoAspectRatio > containerAspectRatio) {
+            // 视频更宽，以宽度为准
+            this.videoDisplaySize.width = containerWidth;
+            this.videoDisplaySize.height = containerWidth / videoAspectRatio;
+            this.videoDisplayOffset.x = 0;
+            this.videoDisplayOffset.y = (containerHeight - this.videoDisplaySize.height) / 2;
+        } else {
+            // 视频更高，以高度为准
+            this.videoDisplaySize.width = containerHeight * videoAspectRatio;
+            this.videoDisplaySize.height = containerHeight;
+            this.videoDisplayOffset.x = (containerWidth - this.videoDisplaySize.width) / 2;
+            this.videoDisplayOffset.y = 0;
+        }
+        
+        // 更新视频信息显示
+        const resolutionInfo = `${this.videoRealSize.width}×${this.videoRealSize.height}`;
+        const currentInfo = this.videoInfo.textContent;
+        if (currentInfo && !currentInfo.includes('×')) {
+            this.videoInfo.textContent = `${currentInfo} - ${resolutionInfo}`;
+        }
+        
+        // 更新视频显示区域指示器
+        this.updateVideoDisplayIndicator();
+        
+        // 重新调整现有的LOGO和水印位置
+        this.adjustOverlaysToVideoArea();
+        
+        this.addLog('info', `📐 视频分辨率: ${resolutionInfo}, 显示区域: ${Math.round(this.videoDisplaySize.width)}×${Math.round(this.videoDisplaySize.height)}`);
+    }
+
+    // 更新视频显示区域指示器
+    updateVideoDisplayIndicator() {
+        if (!this.videoDisplayIndicator) return;
+        
+        // 设置指示器的位置和大小以匹配视频实际显示区域
+        this.videoDisplayIndicator.style.left = this.videoDisplayOffset.x + 'px';
+        this.videoDisplayIndicator.style.top = this.videoDisplayOffset.y + 'px';
+        this.videoDisplayIndicator.style.width = this.videoDisplaySize.width + 'px';
+        this.videoDisplayIndicator.style.height = this.videoDisplaySize.height + 'px';
+        this.videoDisplayIndicator.style.display = 'block';
+        
+        // 当有LOGO或水印时，添加样式标识
+        const hasOverlays = (this.logoOverlay && this.logoOverlay.style.display !== 'none') ||
+                          (this.watermarkOverlay && this.watermarkOverlay.style.display !== 'none');
+        
+        if (hasOverlays) {
+            this.videoOverlay.classList.add('has-overlays');
+        } else {
+            this.videoOverlay.classList.remove('has-overlays');
+        }
+    }
+
+    // 调整覆盖层元素到视频显示区域
+    adjustOverlaysToVideoArea() {
+        if (this.logoOverlay && this.logoOverlay.style.display !== 'none') {
+            this.moveOverlayToVideoArea('logo');
+        }
+        if (this.watermarkOverlay && this.watermarkOverlay.style.display !== 'none') {
+            this.moveOverlayToVideoArea('watermark');
+        }
+    }
+
+    // 将覆盖层元素移动到视频显示区域内
+    moveOverlayToVideoArea(type) {
+        const element = type === 'logo' ? this.logoOverlay : this.watermarkOverlay;
+        if (!element) return;
+        
+        // 获取当前位置和大小
+        const currentLeft = parseInt(element.style.left) || 0;
+        const currentTop = parseInt(element.style.top) || 0;
+        const currentWidth = parseInt(element.style.width) || 100;
+        const currentHeight = parseInt(element.style.height) || 100;
+        
+        // 限制在视频显示区域内
+        const maxLeft = this.videoDisplayOffset.x + this.videoDisplaySize.width - currentWidth;
+        const maxTop = this.videoDisplayOffset.y + this.videoDisplaySize.height - currentHeight;
+        
+        const constrainedLeft = Math.max(this.videoDisplayOffset.x, Math.min(currentLeft, maxLeft));
+        const constrainedTop = Math.max(this.videoDisplayOffset.y, Math.min(currentTop, maxTop));
+        
+        // 应用新位置
+        element.style.left = constrainedLeft + 'px';
+        element.style.top = constrainedTop + 'px';
+        
+        // 更新输入框
+        this.updateInputsFromOverlay(type);
+    }
+
+    // 格式化时间显示
+    formatTime(seconds) {
+        if (isNaN(seconds)) return '00:00';
+        
+        const minutes = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        
+        return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    // ================================
+    // 坐标转换功能（播放器坐标 ↔ 视频比例坐标）
+    // ================================
+
+    // 将播放器坐标转换为相对于视频真实尺寸的坐标
+    playerCoordsToVideoCoords(playerX, playerY, playerWidth, playerHeight) {
+        if (this.videoRealSize.width === 0 || this.videoRealSize.height === 0) {
+            return { x: 0, y: 0, width: 100, height: 100 };
+        }
+
+        // 转换为相对于视频显示区域的坐标
+        const relativeX = playerX - this.videoDisplayOffset.x;
+        const relativeY = playerY - this.videoDisplayOffset.y;
+
+        // 计算在视频真实尺寸中的坐标
+        const scaleX = this.videoRealSize.width / this.videoDisplaySize.width;
+        const scaleY = this.videoRealSize.height / this.videoDisplaySize.height;
+
+        return {
+            x: Math.round(relativeX * scaleX),
+            y: Math.round(relativeY * scaleY),
+            width: Math.round(playerWidth * scaleX),
+            height: Math.round(playerHeight * scaleY)
+        };
+    }
+
+    // 将视频真实坐标转换为播放器坐标
+    videoCoordsToPlayerCoords(videoX, videoY, videoWidth, videoHeight) {
+        if (this.videoRealSize.width === 0 || this.videoRealSize.height === 0) {
+            return { x: 50, y: 50, width: 100, height: 100 };
+        }
+
+        // 计算缩放比例
+        const scaleX = this.videoDisplaySize.width / this.videoRealSize.width;
+        const scaleY = this.videoDisplaySize.height / this.videoRealSize.height;
+
+        // 转换为播放器坐标
+        const playerX = this.videoDisplayOffset.x + (videoX * scaleX);
+        const playerY = this.videoDisplayOffset.y + (videoY * scaleY);
+
+        return {
+            x: Math.round(playerX),
+            y: Math.round(playerY),
+            width: Math.round(videoWidth * scaleX),
+            height: Math.round(videoHeight * scaleY)
+        };
+    }
+
+    // 获取当前LOGO/水印在视频真实坐标系中的位置和大小
+    getOverlayVideoCoords(type) {
+        const element = type === 'logo' ? this.logoOverlay : this.watermarkOverlay;
+        if (!element || element.style.display === 'none') {
+            return null;
+        }
+
+        const playerX = parseInt(element.style.left) || 0;
+        const playerY = parseInt(element.style.top) || 0;
+        const playerWidth = parseInt(element.style.width) || 100;
+        const playerHeight = parseInt(element.style.height) || 100;
+
+        return this.playerCoordsToVideoCoords(playerX, playerY, playerWidth, playerHeight);
+    }
+
+    // ================================
+    // LOGO和水印预览功能
+    // ================================
+
+    // 更新LOGO预览
+    updateLogoPreview(imagePath) {
+        if (!this.logoPreviewImg || !imagePath) return;
+        
+        this.logoPreviewImg.src = `file://${imagePath}`;
+        this.logoOverlay.style.display = 'block';
+        
+        // 设置初始位置和大小（基于视频显示区域）
+        this.setOverlayInitialPosition('logo');
+        this.updateInputsFromOverlay('logo');
+        
+        // 更新视频显示区域指示器样式
+        this.updateVideoDisplayIndicator();
+        
+        this.addLog('info', '🎨 LOGO预览已更新');
+    }
+
+    // 更新水印预览
+    updateWatermarkPreview(imagePath) {
+        if (!this.watermarkPreviewImg || !imagePath) return;
+        
+        this.watermarkPreviewImg.src = `file://${imagePath}`;
+        this.watermarkOverlay.style.display = 'block';
+        
+        // 设置初始位置和大小（基于视频显示区域）
+        this.setOverlayInitialPosition('watermark');
+        this.updateInputsFromOverlay('watermark');
+        
+        // 更新视频显示区域指示器样式
+        this.updateVideoDisplayIndicator();
+        
+        this.addLog('info', '🌊 水印预览已更新');
+    }
+
+    // 设置覆盖层元素的初始位置（智能定位到视频区域内）
+    setOverlayInitialPosition(type) {
+        const element = type === 'logo' ? this.logoOverlay : this.watermarkOverlay;
+        if (!element) return;
+        
+        // 计算合适的初始大小（基于视频显示尺寸的比例）
+        const initialSize = Math.min(this.videoDisplaySize.width, this.videoDisplaySize.height) * 0.15; // 15%的视频尺寸
+        const minSize = 40; // 最小尺寸
+        const size = Math.max(minSize, initialSize);
+        
+        // 计算初始位置
+        let x, y;
+        if (type === 'logo') {
+            // LOGO默认放在左上角
+            x = this.videoDisplayOffset.x + 20;
+            y = this.videoDisplayOffset.y + 20;
+        } else {
+            // 水印默认放在右下角
+            x = this.videoDisplayOffset.x + this.videoDisplaySize.width - size - 20;
+            y = this.videoDisplayOffset.y + this.videoDisplaySize.height - size - 20;
+        }
+        
+        // 确保在视频显示区域内
+        x = Math.max(this.videoDisplayOffset.x, Math.min(x, this.videoDisplayOffset.x + this.videoDisplaySize.width - size));
+        y = Math.max(this.videoDisplayOffset.y, Math.min(y, this.videoDisplayOffset.y + this.videoDisplaySize.height - size));
+        
+        // 设置位置和大小
+        element.style.left = x + 'px';
+        element.style.top = y + 'px';
+        element.style.width = size + 'px';
+        element.style.height = size + 'px';
+    }
+
+    // 设置覆盖层元素的位置和大小
+    setOverlayPosition(type, x, y, width, height) {
+        const element = type === 'logo' ? this.logoOverlay : this.watermarkOverlay;
+        if (!element) return;
+        
+        element.style.left = x + 'px';
+        element.style.top = y + 'px';
+        element.style.width = width + 'px';
+        element.style.height = height + 'px';
+    }
+
+    // 从输入框更新覆盖层位置（输入框中的值是基于视频真实分辨率的）
+    updateOverlayFromInputs(type) {
+        const prefix = type === 'logo' ? 'logo' : 'watermark';
+        
+        const videoX = parseInt(this[`${prefix}XInput`]?.value) || 0;
+        const videoY = parseInt(this[`${prefix}YInput`]?.value) || 0;
+        const videoWidth = parseInt(this[`${prefix}WidthInput`]?.value) || 100;
+        const videoHeight = parseInt(this[`${prefix}HeightInput`]?.value) || 100;
+        
+        // 将视频坐标转换为播放器坐标
+        const playerCoords = this.videoCoordsToPlayerCoords(videoX, videoY, videoWidth, videoHeight);
+        
+        // 限制在视频显示区域内
+        const maxX = this.videoDisplayOffset.x + this.videoDisplaySize.width - playerCoords.width;
+        const maxY = this.videoDisplayOffset.y + this.videoDisplaySize.height - playerCoords.height;
+        
+        const constrainedX = Math.max(this.videoDisplayOffset.x, Math.min(playerCoords.x, maxX));
+        const constrainedY = Math.max(this.videoDisplayOffset.y, Math.min(playerCoords.y, maxY));
+        
+        this.setOverlayPosition(type, constrainedX, constrainedY, playerCoords.width, playerCoords.height);
+    }
+
+    // 从覆盖层更新输入框（输入框显示基于视频真实分辨率的坐标）
+    updateInputsFromOverlay(type) {
+        const element = type === 'logo' ? this.logoOverlay : this.watermarkOverlay;
+        const prefix = type === 'logo' ? 'logo' : 'watermark';
+        
+        if (!element) return;
+        
+        // 获取播放器坐标
+        const playerX = parseInt(element.style.left) || 0;
+        const playerY = parseInt(element.style.top) || 0;
+        const playerWidth = parseInt(element.style.width) || 100;
+        const playerHeight = parseInt(element.style.height) || 100;
+        
+        // 转换为视频真实坐标
+        const videoCoords = this.playerCoordsToVideoCoords(playerX, playerY, playerWidth, playerHeight);
+        
+        // 更新输入框（显示视频真实坐标）
+        if (this[`${prefix}XInput`]) this[`${prefix}XInput`].value = videoCoords.x;
+        if (this[`${prefix}YInput`]) this[`${prefix}YInput`].value = videoCoords.y;
+        if (this[`${prefix}WidthInput`]) this[`${prefix}WidthInput`].value = videoCoords.width;
+        if (this[`${prefix}HeightInput`]) this[`${prefix}HeightInput`].value = videoCoords.height;
+    }
+
+    // ================================
+    // 拖拽和缩放功能
+    // ================================
+
+    initializeDragAndResize() {
+        // 为覆盖层元素添加拖拽事件
+        [this.logoOverlay, this.watermarkOverlay].forEach(element => {
+            if (!element) return;
+            
+            // 鼠标按下事件
+            element.addEventListener('mousedown', (e) => this.startDrag(e, element));
+            
+            // 缩放手柄事件
+            const resizeHandles = element.querySelectorAll('.resize-handle');
+            resizeHandles.forEach(handle => {
+                handle.addEventListener('mousedown', (e) => this.startResize(e, element, handle));
+            });
+        });
+        
+        // 全局鼠标事件
+        document.addEventListener('mousemove', (e) => this.onMouseMove(e));
+        document.addEventListener('mouseup', (e) => this.onMouseUp(e));
+    }
+
+    startDrag(e, element) {
+        if (e.target.classList.contains('resize-handle')) return;
+        
+        e.preventDefault();
+        this.isDragging = true;
+        this.dragElement = element;
+        
+        this.dragStartPos = { x: e.clientX, y: e.clientY };
+        this.elementStartPos = {
+            x: parseInt(element.style.left) || 0,
+            y: parseInt(element.style.top) || 0
+        };
+        
+        element.classList.add('dragging');
+        element.classList.add('selected');
+        
+        // 移除其他元素的选中状态
+        [this.logoOverlay, this.watermarkOverlay].forEach(el => {
+            if (el && el !== element) {
+                el.classList.remove('selected');
+            }
+        });
+    }
+
+    startResize(e, element, handle) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        this.isResizing = true;
+        this.dragElement = element;
+        this.resizeHandle = handle;
+        
+        this.dragStartPos = { x: e.clientX, y: e.clientY };
+        this.elementStartPos = {
+            x: parseInt(element.style.left) || 0,
+            y: parseInt(element.style.top) || 0
+        };
+        this.resizeStartSize = {
+            width: element.offsetWidth,
+            height: element.offsetHeight
+        };
+        
+        element.classList.add('resizing');
+        element.classList.add('selected');
+    }
+
+    onMouseMove(e) {
+        if (!this.isDragging && !this.isResizing) return;
+        
+        e.preventDefault();
+        
+        const deltaX = e.clientX - this.dragStartPos.x;
+        const deltaY = e.clientY - this.dragStartPos.y;
+        
+        if (this.isDragging) {
+            this.handleDrag(deltaX, deltaY);
+        } else if (this.isResizing) {
+            this.handleResize(deltaX, deltaY);
+        }
+    }
+
+    handleDrag(deltaX, deltaY) {
+        if (!this.dragElement) return;
+        
+        const newX = this.elementStartPos.x + deltaX;
+        const newY = this.elementStartPos.y + deltaY;
+        const elementWidth = this.dragElement.offsetWidth;
+        const elementHeight = this.dragElement.offsetHeight;
+        
+        // 限制在视频显示区域内
+        const maxX = this.videoDisplayOffset.x + this.videoDisplaySize.width - elementWidth;
+        const maxY = this.videoDisplayOffset.y + this.videoDisplaySize.height - elementHeight;
+        
+        const constrainedX = Math.max(this.videoDisplayOffset.x, Math.min(newX, maxX));
+        const constrainedY = Math.max(this.videoDisplayOffset.y, Math.min(newY, maxY));
+        
+        this.dragElement.style.left = constrainedX + 'px';
+        this.dragElement.style.top = constrainedY + 'px';
+        
+        // 更新输入框
+        const type = this.dragElement === this.logoOverlay ? 'logo' : 'watermark';
+        this.updateInputsFromOverlay(type);
+    }
+
+    handleResize(deltaX, deltaY) {
+        if (!this.dragElement || !this.resizeHandle) return;
+        
+        const handle = this.resizeHandle;
+        const element = this.dragElement;
+        
+        let newWidth = this.resizeStartSize.width;
+        let newHeight = this.resizeStartSize.height;
+        let newX = this.elementStartPos.x;
+        let newY = this.elementStartPos.y;
+        
+        // 根据手柄类型计算新的尺寸和位置
+        if (handle.classList.contains('se')) {
+            newWidth = this.resizeStartSize.width + deltaX;
+            newHeight = this.resizeStartSize.height + deltaY;
+        } else if (handle.classList.contains('sw')) {
+            newWidth = this.resizeStartSize.width - deltaX;
+            newHeight = this.resizeStartSize.height + deltaY;
+            newX = this.elementStartPos.x + deltaX;
+        } else if (handle.classList.contains('ne')) {
+            newWidth = this.resizeStartSize.width + deltaX;
+            newHeight = this.resizeStartSize.height - deltaY;
+            newY = this.elementStartPos.y + deltaY;
+        } else if (handle.classList.contains('nw')) {
+            newWidth = this.resizeStartSize.width - deltaX;
+            newHeight = this.resizeStartSize.height - deltaY;
+            newX = this.elementStartPos.x + deltaX;
+            newY = this.elementStartPos.y + deltaY;
+        }
+        
+        // 限制最小尺寸
+        newWidth = Math.max(20, newWidth);
+        newHeight = Math.max(20, newHeight);
+        
+        // 限制在视频显示区域内
+        const maxX = this.videoDisplayOffset.x + this.videoDisplaySize.width - newWidth;
+        const maxY = this.videoDisplayOffset.y + this.videoDisplaySize.height - newHeight;
+        
+        newX = Math.max(this.videoDisplayOffset.x, Math.min(newX, maxX));
+        newY = Math.max(this.videoDisplayOffset.y, Math.min(newY, maxY));
+        
+        // 如果位置受限，可能需要调整尺寸
+        if (newX === this.videoDisplayOffset.x || newX === maxX) {
+            // 位置已达到边界，可能需要限制宽度
+            if (handle.classList.contains('sw') || handle.classList.contains('nw')) {
+                newWidth = this.elementStartPos.x + this.resizeStartSize.width - this.videoDisplayOffset.x;
+            } else if (handle.classList.contains('se') || handle.classList.contains('ne')) {
+                newWidth = this.videoDisplayOffset.x + this.videoDisplaySize.width - newX;
+            }
+        }
+        
+        if (newY === this.videoDisplayOffset.y || newY === maxY) {
+            // 位置已达到边界，可能需要限制高度
+            if (handle.classList.contains('nw') || handle.classList.contains('ne')) {
+                newHeight = this.elementStartPos.y + this.resizeStartSize.height - this.videoDisplayOffset.y;
+            } else if (handle.classList.contains('sw') || handle.classList.contains('se')) {
+                newHeight = this.videoDisplayOffset.y + this.videoDisplaySize.height - newY;
+            }
+        }
+        
+        // 再次确保最小尺寸
+        newWidth = Math.max(20, newWidth);
+        newHeight = Math.max(20, newHeight);
+        
+        // 应用新的尺寸和位置
+        element.style.left = newX + 'px';
+        element.style.top = newY + 'px';
+        element.style.width = newWidth + 'px';
+        element.style.height = newHeight + 'px';
+        
+        // 更新输入框
+        const type = element === this.logoOverlay ? 'logo' : 'watermark';
+        this.updateInputsFromOverlay(type);
+    }
+
+    onMouseUp(e) {
+        if (this.isDragging || this.isResizing) {
+            // 清理拖拽状态
+            if (this.dragElement) {
+                this.dragElement.classList.remove('dragging', 'resizing');
+            }
+            
+            this.isDragging = false;
+            this.isResizing = false;
+            this.dragElement = null;
+            this.resizeHandle = null;
         }
     }
 }

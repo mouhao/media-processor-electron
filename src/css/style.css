@@ -92,6 +92,9 @@ body, html {
     background-color: #fff;
     border-right: 1px solid #e0e0e0;
     min-width: 0; /* 确保flex子项可以收缩 */
+    position: relative;
+    z-index: 1;
+    height: 100%; /* 确保占满高度 */
 }
 
 .folder-selection {
@@ -231,6 +234,13 @@ body, html {
     overflow-x: auto;
     min-width: 0;
     position: relative;
+    min-height: 200px; /* 确保有最小高度 */
+}
+
+/* 在logo-watermark模式下的样式调整 */
+.left-panel[data-current-type="logo-watermark"] .video-preview-container {
+    /* 当file-list隐藏时，给video-preview更多空间和更好的视觉效果 */
+    margin-bottom: 10px;
 }
 
 .file-item {
@@ -449,12 +459,16 @@ body, html {
 }
 
 .bottom-bar {
-    display: flex;
+    display: flex !important; /* 强制显示 */
     justify-content: space-between;
     align-items: center;
     padding: 15px;
     border-top: 1px solid #e0e0e0;
     background-color: #f8f9fa;
+    flex-shrink: 0; /* 不允许收缩 */
+    min-height: 60px; /* 最小高度 */
+    position: relative;
+    z-index: 15; /* 确保在最顶层 */
 }
 
 .action-buttons {
@@ -574,6 +588,16 @@ body, html {
     font-size: 16px;
 }
 
+/* 可滚动内容区域 */
+.scrollable-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
 /* Progress Section */
 .progress-section {
     height: 300px;
@@ -581,6 +605,8 @@ body, html {
     border-top: 1px solid #e0e0e0;
     display: flex;
     flex-direction: column;
+    position: relative;
+    z-index: 10;
 }
 
 .progress-header {
@@ -1346,4 +1372,362 @@ input[type="range"]::-moz-range-thumb {
 
 .warning-text strong {
     color: #664d03;
+}
+
+/* ================================
+   视频预览器样式
+   ================================ */
+
+.video-preview-container {
+    margin-bottom: 20px;
+    border: 1px solid #e3e3e3;
+    border-radius: 8px;
+    background: #fff;
+    overflow: visible;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+    position: relative;
+    z-index: 1;
+}
+
+
+
+.video-player-wrapper {
+    position: relative;
+    background: #000;
+    width: 474px;
+    height: 267px;
+    max-width: 100%;
+    margin: 0 auto;
+    overflow: hidden;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1;
+}
+
+/* 播放器尺寸指示器 */
+.video-player-wrapper::before {
+    content: "播放器: 16:9 固定尺寸";
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    z-index: 4;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.video-player-wrapper:hover::before {
+    opacity: 1;
+}
+
+.video-player {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+/* 视频覆盖层 */
+.video-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 2;
+}
+
+/* 视频实际显示区域指示器 */
+.video-display-indicator {
+    position: absolute;
+    border: 2px dashed rgba(255, 255, 255, 0.3);
+    background: rgba(0, 0, 0, 0.05);
+    pointer-events: none;
+    z-index: 1;
+    transition: opacity 0.3s ease;
+}
+
+.video-overlay:hover + .video-display-indicator,
+.video-overlay.has-overlays + .video-display-indicator {
+    opacity: 0.8;
+}
+
+/* 覆盖层元素 */
+.overlay-element {
+    position: absolute;
+    pointer-events: auto;
+    cursor: move;
+    border: 2px solid transparent;
+    user-select: none;
+    transition: border-color 0.2s ease;
+    min-width: 20px;
+    min-height: 20px;
+}
+
+.overlay-element:hover {
+    border-color: #007bff;
+}
+
+.overlay-element.selected {
+    border-color: #007bff;
+    box-shadow: 0 0 0 1px rgba(0, 123, 255, 0.3);
+}
+
+.overlay-element img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    pointer-events: none;
+    display: block;
+}
+
+/* LOGO元素特定样式 */
+.logo-element {
+    border-color: #28a745;
+}
+
+.logo-element:hover,
+.logo-element.selected {
+    border-color: #28a745;
+    box-shadow: 0 0 0 1px rgba(40, 167, 69, 0.3);
+}
+
+/* 水印元素特定样式 */
+.watermark-element {
+    border-color: #17a2b8;
+}
+
+.watermark-element:hover,
+.watermark-element.selected {
+    border-color: #17a2b8;
+    box-shadow: 0 0 0 1px rgba(23, 162, 184, 0.3);
+}
+
+/* 缩放手柄 */
+.resize-handles {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.overlay-element:hover .resize-handles,
+.overlay-element.selected .resize-handles {
+    opacity: 1;
+}
+
+.resize-handle {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: #007bff;
+    border: 1px solid #fff;
+    border-radius: 50%;
+    pointer-events: auto;
+    z-index: 3;
+}
+
+.resize-handle:hover {
+    background: #0056b3;
+    transform: scale(1.2);
+}
+
+/* 四个角的手柄位置 */
+.resize-handle.nw {
+    top: -4px;
+    left: -4px;
+    cursor: nw-resize;
+}
+
+.resize-handle.ne {
+    top: -4px;
+    right: -4px;
+    cursor: ne-resize;
+}
+
+.resize-handle.sw {
+    bottom: -4px;
+    left: -4px;
+    cursor: sw-resize;
+}
+
+.resize-handle.se {
+    bottom: -4px;
+    right: -4px;
+    cursor: se-resize;
+}
+
+/* 预览信息 */
+.preview-info {
+    padding: 12px 16px;
+    background: #f8f9fa;
+    border: 1px solid #e3e3e3;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #666;
+    width: 474px; /* 与播放器宽度一致 */
+    margin: 12px auto 0 auto; /* 居中显示 */
+    text-align: center;
+    line-height: 1.4;
+}
+
+#video-info {
+    display: block;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+/* 拖拽状态 */
+.overlay-element.dragging {
+    opacity: 0.8;
+    z-index: 5;
+}
+
+.overlay-element.resizing {
+    z-index: 5;
+}
+
+/* 响应式调整 */
+@media (max-width: 550px) {
+    .video-player-wrapper {
+        width: 367px;
+        height: 207px;
+    }
+    
+    .preview-info {
+        width: 367px;
+        font-size: 12px;
+    }
+    
+    #video-info div {
+        font-size: inherit;
+    }
+}
+
+@media (max-width: 400px) {
+    .video-player-wrapper {
+        width: 261px;
+        height: 147px;
+    }
+    
+    .preview-info {
+        width: 261px;
+        font-size: 11px;
+        padding: 10px 12px;
+    }
+    
+    #video-info div {
+        font-size: inherit !important;
+    }
+}
+
+@media (max-width: 290px) {
+    .video-player-wrapper {
+        width: 154px;
+        height: 87px;
+    }
+    
+    .preview-info {
+        width: 154px;
+        padding: 8px 10px;
+        font-size: 10px;
+    }
+    
+    #video-info div {
+        font-size: inherit !important;
+    }
+    
+    .video-preview-container {
+        padding: 12px;
+    }
+}
+
+@media (max-width: 768px) {
+    .resize-handle {
+        width: 12px;
+        height: 12px;
+    }
+    
+    .resize-handle.nw {
+        top: -6px;
+        left: -6px;
+    }
+    
+    .resize-handle.ne {
+        top: -6px;
+        right: -6px;
+    }
+    
+    .resize-handle.sw {
+        bottom: -6px;
+        left: -6px;
+    }
+    
+    .resize-handle.se {
+        bottom: -6px;
+        right: -6px;
+    }
+    
+    /* 确保底部栏在小屏幕下仍然固定显示 */
+    .bottom-bar {
+        display: flex !important;
+        flex-shrink: 0 !important;
+        min-height: 50px !important;
+        padding: 10px 15px !important;
+    }
+    
+    .file-count {
+        font-size: 12px !important;
+    }
+    
+    .action-buttons {
+        gap: 6px !important;
+    }
+    
+    .action-buttons .btn {
+        padding: 6px 12px !important;
+        font-size: 12px !important;
+    }
+}
+
+/* 超小屏幕下确保底部栏可见 */
+@media (max-width: 480px) {
+    .bottom-bar {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 8px !important;
+        padding: 8px 10px !important;
+        min-height: 70px !important;
+    }
+    
+    .file-count {
+        text-align: center !important;
+        font-size: 11px !important;
+    }
+    
+    .action-buttons {
+        justify-content: center !important;
+        flex-wrap: wrap !important;
+        gap: 4px !important;
+    }
+    
+    .action-buttons .btn {
+        padding: 4px 8px !important;
+        font-size: 11px !important;
+        min-width: 80px !important;
+    }
 } 
