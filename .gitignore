@@ -9,7 +9,6 @@
 *.icns
 *.cer
 *.dmg
-*.exe
 *.pkg
 *.msi
 *.appx
