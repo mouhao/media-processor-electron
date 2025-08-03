@@ -1,7 +1,9 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { spawn } = require('child_process');
-const { ffmpegPath, ffprobePath, generateUniqueFilename, getHardwareAccelArgs } = require('./common-processor');
+const { ffmpegPath, ffprobePath, generateUniqueFilename, getHardwareAccelArgs, getFilterCompatibleHwAccelArgs } = require('./common-processor');
+
+
 
 /**
  * 运行FFprobe获取视频信息
@@ -293,8 +295,8 @@ async function processVideoLogoWatermark(inputPath, outputPath, options, logCall
         // 构建FFmpeg参数
         const args = [];
         
-        // 添加硬件加速参数
-        const hwAccelArgs = getHardwareAccelArgs();
+        // 添加兼容过滤器的硬件加速参数（避免D3D11格式问题）
+        const hwAccelArgs = getFilterCompatibleHwAccelArgs();
         args.push(...hwAccelArgs);
         
         // 输入视频文件

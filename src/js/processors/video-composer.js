@@ -1,7 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { spawn } = require('child_process');
-const { ffmpegPath, ffprobePath, generateUniqueFilename, getHardwareAccelArgs, getBestHardwareEncoder, getAccelerationType } = require('./common-processor');
+const { ffmpegPath, ffprobePath, generateUniqueFilename, getHardwareAccelArgs, getFilterCompatibleHwAccelArgs, getBestHardwareEncoder, getAccelerationType } = require('./common-processor');
 
 // 分析视频文件的编码信息
 async function analyzeVideosForComposition(files, logCallback) {
@@ -753,8 +753,8 @@ async function buildConcatArgs(files, outputDir, outputFileName, options, qualit
     // ✅ 使用filter_complex方式，完全参考intro-outro-processor.js
     const args = [];
     
-    // 添加跨平台硬件加速支持
-    args.push(...getHardwareAccelArgs());
+    // 添加兼容过滤器的硬件加速支持（避免D3D11格式问题）
+    args.push(...getFilterCompatibleHwAccelArgs());
     
     const inputFiles = [];
     let videoProcessing = '';  // 视频流处理部分

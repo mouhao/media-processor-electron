@@ -1,7 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { spawn } = require('child_process');
-const { ffmpegPath, ffprobePath, generateUniqueFilename, getHardwareAccelArgs, getBestHardwareEncoder, getAccelerationType } = require('./common-processor');
+const { ffmpegPath, ffprobePath, generateUniqueFilename, getHardwareAccelArgs, getFilterCompatibleHwAccelArgs, getBestHardwareEncoder, getAccelerationType } = require('./common-processor');
 
 // 从video-composer.js借鉴的辅助函数
 function getCodecCompatibilityGroup(codec) {
@@ -727,8 +727,8 @@ async function concatVideosIntroOutro(mainVideo, introFile, outroFile, outputPat
     // ✅ 采用shell脚本的filter_complex方式，避免时间戳问题
     const ffmpegArgs = [];
     
-    // 添加跨平台硬件加速支持
-    ffmpegArgs.push(...getHardwareAccelArgs());
+    // 添加兼容过滤器的硬件加速支持（避免D3D11格式问题）
+    ffmpegArgs.push(...getFilterCompatibleHwAccelArgs());
     
     const inputFiles = [];
     let videoProcessing = '';  // 视频流处理部分

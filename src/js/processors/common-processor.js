@@ -9,17 +9,13 @@ function getFfmpegPaths() {
     const isMac = process.platform === 'darwin';
     const isWin = process.platform === 'win32';
 
-    console.log('Debug - getFfmpegPaths called');
-    console.log('Debug - Platform:', process.platform);
-    console.log('Debug - __dirname:', __dirname);
-    console.log('Debug - app.isPackaged:', isPackaged);
+
 
     let ffmpegPath, ffprobePath;
 
     if (isPackaged) {
         // 在打包后的应用中，可执行文件位于 resources 目录下
         const resourcesPath = process.resourcesPath;
-        console.log('Debug - resourcesPath:', resourcesPath);
         if (isMac) {
             ffmpegPath = path.join(resourcesPath, 'bin', 'mac', 'ffmpeg');
             ffprobePath = path.join(resourcesPath, 'bin', 'mac', 'ffprobe');
@@ -30,7 +26,6 @@ function getFfmpegPaths() {
     } else {
         // 在开发模式下，路径相对于项目根目录
         const basePath = path.join(__dirname, '..', '..', '..');
-        console.log('Debug - basePath (dev mode):', basePath);
         if (isMac) {
             ffmpegPath = path.join(basePath, 'bin', 'mac', 'ffmpeg');
             ffprobePath = path.join(basePath, 'bin', 'mac', 'ffprobe');
@@ -59,10 +54,7 @@ function reportProgress(progressCallback, progress) {
 async function checkFfmpeg() {
   const { ffmpegPath, ffprobePath } = getFfmpegPaths();
   
-  console.log('Platform:', process.platform);
-  console.log('__dirname:', __dirname);
-  console.log('FFmpeg path:', ffmpegPath);
-  console.log('FFprobe path:', ffprobePath);
+
   
   if (!ffmpegPath || !ffprobePath) {
       console.error('FFmpeg path not found for this platform.');
@@ -71,16 +63,8 @@ async function checkFfmpeg() {
   
   // 检查文件是否存在
   const fs = require('fs');
-  const ffmpegExists = fs.existsSync(ffmpegPath);
-  const ffprobeExists = fs.existsSync(ffprobePath);
-  
-  console.log('FFmpeg exists:', ffmpegExists);
-  console.log('FFprobe exists:', ffprobeExists);
-  
-  if (!ffmpegExists || !ffprobeExists) {
+  if (!fs.existsSync(ffmpegPath) || !fs.existsSync(ffprobePath)) {
       console.error('FFmpeg or ffprobe file does not exist');
-      console.error('FFmpeg path checked:', ffmpegPath);
-      console.error('FFprobe path checked:', ffprobePath);
       return false;
   }
   
@@ -482,6 +466,23 @@ function getHardwareAccelArgs() {
 }
 
 /**
+ * 获取与过滤器兼容的硬件加速参数
+ * 在Windows下不使用硬件输出格式，避免与overlay/filter_complex过滤器的兼容性问题
+ */
+function getFilterCompatibleHwAccelArgs() {
+    if (process.platform === 'darwin') {
+        // macOS: 使用VideoToolbox（通常兼容过滤器）
+        return ['-hwaccel', 'videotoolbox'];
+    } else if (process.platform === 'win32') {
+        // Windows: 使用硬件解码但不使用硬件输出格式，避免D3D11兼容性问题
+        return ['-hwaccel', 'd3d11va'];
+    } else {
+        // Linux: 使用VAAPI但不指定输出格式
+        return ['-hwaccel', 'vaapi'];
+    }
+}
+
+/**
  * 获取跨平台最佳硬件编码器
  */
 function getBestHardwareEncoder(codec = 'h264', logCallback = null) {
@@ -532,6 +533,7 @@ module.exports = {
     getMp3Bitrate,
     generateUniqueFilename,
     getHardwareAccelArgs,
+    getFilterCompatibleHwAccelArgs,
     getBestHardwareEncoder,
     getAccelerationType,
     ffmpegPath,
