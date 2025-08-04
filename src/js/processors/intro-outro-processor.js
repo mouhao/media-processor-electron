@@ -778,7 +778,7 @@ async function concatVideosIntroOutro(mainVideo, introFile, outroFile, outputPat
         ffmpegArgs.push('-c:v', encoder);
         
         if (process.platform === 'darwin') {
-            ffmpegArgs.push('-profile:v', 'main', '-b:v', '8000k', '-preset', 'faster');
+            ffmpegArgs.push('-profile:v', 'baseline', '-b:v', '8000k', '-preset', 'faster');
         } else {
             ffmpegArgs.push('-preset', 'faster', '-crf', '18');
         }
@@ -1013,7 +1013,7 @@ function getQualityMatchSettings(videoInfo, logCallback = null) {
                     }
                 }
             } else {
-                settings.push('-profile:v', 'baseline'); // 默认使用main profile
+                settings.push('-profile:v', 'baseline'); // 默认使用baseline profile以获得最佳兼容性
             }
             
             // Level设置（如果有）
@@ -1493,7 +1493,7 @@ async function convertToMatchFormat(inputFile, outputFile, referenceFormat, logC
         
         // 跨平台编码器选择
         const encoder = getBestHardwareEncoder('h264', logCallback);
-        tsConvertArgs.push('-c:v', encoder, '-profile:v', 'main');
+        tsConvertArgs.push('-c:v', encoder, '-profile:v', 'baseline');
         
         tsConvertArgs.push(
             '-pix_fmt', referenceFormat.pixelFormat,
@@ -1524,7 +1524,7 @@ async function convertToMatchFormat(inputFile, outputFile, referenceFormat, logC
         
         // 跨平台编码器选择
         const encoder = getBestHardwareEncoder('h264', logCallback);
-        args.push('-c:v', encoder, '-profile:v', 'main');
+        args.push('-c:v', encoder, '-profile:v', 'baseline');
         
         args.push(
             '-pix_fmt', referenceFormat.pixelFormat,

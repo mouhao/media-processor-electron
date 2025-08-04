@@ -169,29 +169,157 @@
                 <div id="video-settings" class="tab-content">
                     <h4>视频处理设置</h4>
                     <div class="setting-group">
-                        <label for="lesson-name">课程名称：</label>
-                        <input type="text" id="lesson-name" placeholder="例如：lesson2">
-                    </div>
-                    <div class="setting-group">
                         <label for="video-resolution">输出分辨率：</label>
                         <select id="video-resolution">
+                            <option value="auto" selected>自动（使用最高分辨率）</option>
+                            <option value="4k">4K (3840x2160)</option>
+                            <option value="2k">2K (2560x1440)</option>
+                            <option value="1080p">1080p (1920x1080)</option>
                             <option value="720p">720p (1280x720)</option>
-                            <option value="1080p" selected>1080p (1920x1080)</option>
+                            <option value="480p">480p (854x480)</option>
+                            <option value="custom">自定义分辨率</option>
                         </select>
                     </div>
+
+                    <div class="setting-group" id="video-custom-resolution-group" style="display: none;">
+                        <label>自定义分辨率：</label>
+                        <div class="resolution-input-group">
+                            <div class="input-with-label">
+                                <label for="video-custom-width">宽度:</label>
+                                <input type="number" id="video-custom-width" min="320" max="7680" value="1920" placeholder="1920">
+                                <span class="unit">px</span>
+                            </div>
+                            <span class="resolution-separator">×</span>
+                            <div class="input-with-label">
+                                <label for="video-custom-height">高度:</label>
+                                <input type="number" id="video-custom-height" min="240" max="4320" value="1080" placeholder="1080">
+                                <span class="unit">px</span>
+                            </div>
+                        </div>
+                        <span class="help-text">建议使用标准比例，如16:9 (1920×1080) 或 4:3 (1024×768)</span>
+                    </div>
+
                     <div class="setting-group">
-                        <label for="video-bitrate">视频比特率：</label>
-                        <select id="video-bitrate">
-                            <option value="1000">1000k</option>
-                            <option value="2000" selected>2000k</option>
-                            <option value="3000">3000k</option>
-                            <option value="5000">5000k</option>
+                        <label for="video-quality">质量预设：</label>
+                        <select id="video-quality">
+                            <option value="high">高质量（文件较大，速度较慢）</option>
+                            <option value="medium" selected>平衡（推荐）</option>
+                            <option value="fast">快速（文件较小，质量一般）</option>
+                            <option value="custom">自定义（专业设置）</option>
                         </select>
+                        <span class="help-text">自定义模式可设置详细的编码参数</span>
+                    </div>
+
+                    <!-- 自定义编码参数设置 -->
+                    <div id="video-custom-quality-group" class="conditional-setting" style="display: none;">
+                        <div class="setting-group">
+                            <label for="video-profile-m3u8">编码规范兼容性：</label>
+                            <select id="video-profile-m3u8">
+                                <option value="baseline" selected>Baseline（基础兼容）</option>
+                                <option value="main">Main（主流兼容）</option>
+                                <option value="high">High（高级特性）</option>
+                            </select>
+                            <span class="help-text">Baseline最兼容，High质量最好</span>
+                        </div>
+                        
+                        <div class="setting-group">
+                            <label for="video-bitrate-m3u8">视频比特率：</label>
+                            <div class="input-with-unit">
+                                <input type="number" id="video-bitrate-m3u8" min="500" max="20000" value="2000" step="100">
+                                <span class="unit">kbps</span>
+                            </div>
+                            <span class="help-text">建议范围：1000-5000 kbps</span>
+                        </div>
+
+                        <div class="setting-group">
+                            <label for="video-framerate-m3u8">视频帧率：</label>
+                            <select id="video-framerate-m3u8">
+                                <option value="24">24 fps</option>
+                                <option value="25">25 fps</option>
+                                <option value="30" selected>30 fps</option>
+                                <option value="50">50 fps</option>
+                                <option value="60">60 fps</option>
+                            </select>
+                        </div>
+
+                        <div class="setting-group">
+                            <label for="audio-bitrate-m3u8">音频比特率：</label>
+                            <select id="audio-bitrate-m3u8">
+                                <option value="96">96 kbps</option>
+                                <option value="128">128 kbps</option>
+                                <option value="192" selected>192 kbps</option>
+                                <option value="256">256 kbps</option>
+                                <option value="320">320 kbps</option>
+                            </select>
+                        </div>
+
+                        <div class="setting-group">
+                            <label for="audio-samplerate-m3u8">音频采样率：</label>
+                            <select id="audio-samplerate-m3u8">
+                                <option value="44100">44.1 kHz（CD质量）</option>
+                                <option value="48000" selected>48 kHz（DVD质量）</option>
+                                <option value="96000">96 kHz（高保真）</option>
+                            </select>
+                        </div>
+
+                        <div class="setting-group">
+                            <label for="encode-preset-m3u8">编码预设：</label>
+                            <select id="encode-preset-m3u8">
+                                <option value="ultrafast">Ultrafast（最快编码）</option>
+                                <option value="superfast">Superfast（超快编码）</option>
+                                <option value="veryfast">Veryfast（很快编码）</option>
+                                <option value="faster">Faster（较快编码）</option>
+                                <option value="fast">Fast（快速编码）</option>
+                                <option value="medium" selected>Medium（平衡）</option>
+                                <option value="slow">Slow（慢速高质量）</option>
+                                <option value="slower">Slower（更慢更高质量）</option>
+                                <option value="veryslow">Veryslow（最慢最高质量）</option>
+                            </select>
+                            <span class="help-text">速度越慢，压缩效率越高，文件越小</span>
+                        </div>
                     </div>
                     <div class="setting-group">
                         <label for="segment-duration">HLS片段时长（秒）：</label>
                         <input type="number" id="segment-duration" value="10" min="5" max="30">
                     </div>
+
+                    <!-- 高级优化选项 -->
+                    <div class="setting-group">
+                        <h5 style="margin: 15px 0 10px 0; color: #666; border-bottom: 1px solid #eee; padding-bottom: 5px;">📱 移动端与兼容性优化</h5>
+                        
+                        <div style="margin-bottom: 12px;">
+                            <label for="video-scaling-strategy">视频缩放策略：</label>
+                            <select id="video-scaling-strategy">
+                                <option value="smart-pad" selected>智能填充（保持完整画面，添加黑边）</option>
+                                <option value="simple-scale">简单缩放（可能裁剪画面）</option>
+                            </select>
+                            <span class="help-text">智能填充确保不丢失画面内容</span>
+                        </div>
+
+                        <div style="margin-bottom: 12px;">
+                            <label>
+                                <input type="checkbox" id="color-enhancement" checked>
+                                🌈 色彩保持增强（防止亮度下降和色彩失真）
+                            </label>
+                        </div>
+
+                        <div style="margin-bottom: 12px;">
+                            <label for="bitrate-control-mode">码率控制模式：</label>
+                            <select id="bitrate-control-mode">
+                                <option value="crf" selected>质量优先（CRF模式，推荐）</option>
+                                <option value="cbr">码率控制（CBR模式，稳定码率）</option>
+                            </select>
+                            <span class="help-text">CBR模式提供更稳定的码率控制</span>
+                        </div>
+
+                        <div style="margin-bottom: 12px;">
+                            <label>
+                                <input type="checkbox" id="mobile-optimization" checked>
+                                📱 移动端优化（低音频码率、44.1kHz采样率）
+                            </label>
+                        </div>
+                    </div>
+
                     <div class="setting-group">
                         <label>
                             <input type="checkbox" id="video-rename" checked>
@@ -343,8 +471,8 @@
                         <div class="setting-group">
                             <label for="video-profile">编码规范兼容性：</label>
                             <select id="video-profile">
-                                <option value="baseline">Baseline（基础兼容）</option>
-                                <option value="main" selected>Main（主流兼容）</option>
+                                <option value="baseline" selected>Baseline（基础兼容）</option>
+                                <option value="main">Main（主流兼容）</option>
                                 <option value="high">High（高级特性）</option>
                             </select>
                             <span class="help-text">Baseline最兼容，High质量最好</span>
@@ -374,8 +502,8 @@
                             <label for="audio-bitrate-custom">音频比特率：</label>
                             <select id="audio-bitrate-custom">
                                 <option value="96">96 kbps</option>
-                                <option value="128" selected>128 kbps</option>
-                                <option value="192">192 kbps</option>
+                                <option value="128">128 kbps</option>
+                                <option value="192" selected>192 kbps</option>
                                 <option value="256">256 kbps</option>
                                 <option value="320">320 kbps</option>
                             </select>
@@ -384,8 +512,8 @@
                         <div class="setting-group">
                             <label for="audio-samplerate">音频采样率：</label>
                             <select id="audio-samplerate">
-                                <option value="44100" selected>44.1 kHz（CD质量）</option>
-                                <option value="48000">48 kHz（DVD质量）</option>
+                                <option value="44100">44.1 kHz（CD质量）</option>
+                                <option value="48000" selected>48 kHz（DVD质量）</option>
                                 <option value="96000">96 kHz（高保真）</option>
                             </select>
                         </div>

@@ -673,12 +673,12 @@ function getQualitySettings(qualityOption) {
         };
     }
     
-    // 预设质量配置
+    // 预设质量配置（默认使用baseline profile以获得最佳兼容性）
     const preset = qualityOption.preset || qualityOption;
     const qualityMap = {
-        'high': { crf: 18, preset: 'slower', audioBitrate: '192k', videoProfile: 'main' },
-        'medium': { crf: 23, preset: 'medium', audioBitrate: '128k', videoProfile: 'main' },
-        'fast': { crf: 28, preset: 'fast', audioBitrate: '96k', videoProfile: 'main' }
+        'high': { crf: 18, preset: 'slower', audioBitrate: '192k', videoProfile: 'baseline' },
+        'medium': { crf: 23, preset: 'medium', audioBitrate: '128k', videoProfile: 'baseline' },
+        'fast': { crf: 28, preset: 'fast', audioBitrate: '96k', videoProfile: 'baseline' }
     };
     return { isCustom: false, ...qualityMap[preset] || qualityMap['medium'] };
 }
@@ -809,7 +809,7 @@ async function buildConcatArgs(files, outputDir, outputFileName, options, qualit
             args.push('-c:v', encoder);
             
             if (process.platform === 'darwin') {
-                args.push('-profile:v', 'main', '-b:v', '8000k', '-preset', 'faster');
+                args.push('-profile:v', 'baseline', '-b:v', '8000k', '-preset', 'faster');
             } else {
                 args.push('-preset', 'faster', '-crf', '18');
             }

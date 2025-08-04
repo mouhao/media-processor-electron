@@ -163,6 +163,20 @@ class MediaProcessorApp {
         this.mp3ForceProcessRadios = document.querySelectorAll('input[name="force-process"]');
         this.mp3ThresholdGroup = document.getElementById('mp3-threshold-group');
         
+        // 视频处理设置元素
+        this.videoResolutionSelect = document.getElementById('video-resolution');
+        this.videoCustomResolutionGroup = document.getElementById('video-custom-resolution-group');
+        this.videoCustomWidthInput = document.getElementById('video-custom-width');
+        this.videoCustomHeightInput = document.getElementById('video-custom-height');
+        this.videoQualitySelect = document.getElementById('video-quality');
+        this.videoCustomQualityGroup = document.getElementById('video-custom-quality-group');
+        
+        // 新增高级优化选项元素
+        this.videoScalingStrategySelect = document.getElementById('video-scaling-strategy');
+        this.colorEnhancementCheckbox = document.getElementById('color-enhancement');
+        this.bitrateControlModeSelect = document.getElementById('bitrate-control-mode');
+        this.mobileOptimizationCheckbox = document.getElementById('mobile-optimization');
+        
         // 视频合成设置元素
         this.composeTypeSelect = document.getElementById('compose-type');
         this.composeResolutionSelect = document.getElementById('compose-resolution');
@@ -303,7 +317,21 @@ class MediaProcessorApp {
             });
         }
 
-        // 监听分辨率选择变化
+        // 监听视频处理分辨率选择变化
+        if (this.videoResolutionSelect) {
+            this.videoResolutionSelect.addEventListener('change', (e) => {
+                this.updateVideoResolutionSettings(e.target.value);
+            });
+        }
+
+        // 监听视频处理质量预设变化
+        if (this.videoQualitySelect) {
+            this.videoQualitySelect.addEventListener('change', (e) => {
+                this.updateVideoQualitySettings(e.target.value);
+            });
+        }
+
+        // 监听视频合成分辨率选择变化
         if (this.composeResolutionSelect) {
             this.composeResolutionSelect.addEventListener('change', (e) => {
                 this.updateResolutionSettings(e.target.value);
@@ -749,6 +777,16 @@ class MediaProcessorApp {
         
         // 根据tab类型控制按钮可用性
         this.updateButtonAvailability(type);
+        
+        // 如果是视频处理标签页，初始化视频处理设置显示状态
+        if (type === 'video') {
+            if (this.videoResolutionSelect) {
+                this.updateVideoResolutionSettings(this.videoResolutionSelect.value);
+            }
+            if (this.videoQualitySelect) {
+                this.updateVideoQualitySettings(this.videoQualitySelect.value);
+            }
+        }
         
         // 如果是合成视频标签页，初始化合成设置显示状态
         if (type === 'compose') {
@@ -1273,16 +1311,52 @@ class MediaProcessorApp {
     }
 
     async processVideoFiles() {
+        const resolution = document.getElementById('video-resolution').value;
+        const quality = document.getElementById('video-quality').value;
+        
         const options = {
-            lessonName: document.getElementById('lesson-name').value || 'lesson',
-            resolution: document.getElementById('video-resolution').value,
-            bitrate: parseInt(document.getElementById('video-bitrate').value),
+            resolution: resolution,
+            quality: quality,
             segmentDuration: parseInt(document.getElementById('segment-duration').value),
-            rename: document.getElementById('video-rename').checked
+            rename: document.getElementById('video-rename').checked,
+            // 新增高级优化选项
+            scalingStrategy: document.getElementById('video-scaling-strategy').value,
+            colorEnhancement: document.getElementById('color-enhancement').checked,
+            bitrateControlMode: document.getElementById('bitrate-control-mode').value,
+            mobileOptimization: document.getElementById('mobile-optimization').checked
         };
 
+        // 如果是自定义分辨率，添加自定义宽高
+        if (resolution === 'custom') {
+            options.customWidth = parseInt(document.getElementById('video-custom-width').value) || 1920;
+            options.customHeight = parseInt(document.getElementById('video-custom-height').value) || 1080;
+        }
+
+        // 如果是自定义质量，添加自定义质量参数
+        if (quality === 'custom') {
+            options.customProfile = document.getElementById('video-profile-m3u8').value;
+            options.customBitrate = parseInt(document.getElementById('video-bitrate-m3u8').value);
+            options.customFramerate = parseInt(document.getElementById('video-framerate-m3u8').value);
+            options.customAudioBitrate = parseInt(document.getElementById('audio-bitrate-m3u8').value);
+            options.customAudioSamplerate = parseInt(document.getElementById('audio-samplerate-m3u8').value);
+            options.customPreset = document.getElementById('encode-preset-m3u8').value;
+        }
+
         this.addLog('info', `🎬 开始处理 ${this.selectedFiles.length} 个视频文件`);
-        this.addLog('info', `⚙️ 课程: ${options.lessonName}, 分辨率: ${options.resolution}, 比特率: ${options.bitrate}k`);
+        
+        let resolutionText = resolution;
+        if (resolution === 'custom') {
+            resolutionText = `自定义 ${options.customWidth}x${options.customHeight}`;
+        } else if (resolution === 'auto') {
+            resolutionText = '自动（保持原分辨率）';
+        }
+        
+        let qualityText = quality;
+        if (quality === 'custom') {
+            qualityText = `自定义 (${options.customBitrate}kbps, ${options.customPreset})`;
+        }
+        
+        this.addLog('info', `⚙️ 分辨率: ${resolutionText}, 质量: ${qualityText}`);
 
         const result = await ipcRenderer.invoke('process-video-files', {
             folderPath: this.currentFolder,
@@ -1814,6 +1888,30 @@ class MediaProcessorApp {
                 if (this.pipPositionGroup) this.pipPositionGroup.style.display = 'none';
                 if (this.pipSizeGroup) this.pipSizeGroup.style.display = 'none';
             }
+        }
+    }
+
+    updateVideoResolutionSettings(resolution) {
+        if (!this.videoCustomResolutionGroup) return;
+        
+        if (resolution === 'custom') {
+            // 显示自定义分辨率输入框
+            this.videoCustomResolutionGroup.style.display = 'block';
+        } else {
+            // 隐藏自定义分辨率输入框
+            this.videoCustomResolutionGroup.style.display = 'none';
+        }
+    }
+
+    updateVideoQualitySettings(quality) {
+        if (!this.videoCustomQualityGroup) return;
+        
+        if (quality === 'custom') {
+            // 显示自定义质量设置输入框
+            this.videoCustomQualityGroup.style.display = 'block';
+        } else {
+            // 隐藏自定义质量设置输入框
+            this.videoCustomQualityGroup.style.display = 'none';
         }
     }
 

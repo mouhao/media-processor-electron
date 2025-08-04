@@ -1,4 +1,12 @@
-/* 全局样式 */
+/* 全局样式 - 固定布局设计，不使用响应式 */
+/* 
+ * 界面布局说明：
+ * - 左侧：文件选择和列表区域 (60%, 最小400px)
+ * - 右侧：功能配置区域 (40%, 最小300px)  
+ * - 底部：进度和日志区域 (固定300px高度)
+ * - 整体最小宽度：800px
+ * - 布局不会因窗口大小变化而改变左右结构
+ */
 * {
     margin: 0;
     padding: 0;
@@ -49,6 +57,7 @@ body, html {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     background-color: #f0f0f0;
     overflow: hidden;
+    min-width: 800px; /* 确保界面最小可用宽度 */
 }
 
 /* App Header */
@@ -76,26 +85,17 @@ body, html {
     display: flex;
     flex-direction: column;
     height: calc(100% - 50px);
+    min-width: 800px; /* 确保主容器最小宽度 */
 }
 
 .container {
     display: flex;
     flex: 1;
     min-height: 0;
+    min-width: 800px; /* 确保内容区域最小宽度 */
 }
 
-/* Left Panel */
-.left-panel {
-    width: 60%;
-    display: flex;
-    flex-direction: column;
-    background-color: #fff;
-    border-right: 1px solid #e0e0e0;
-    min-width: 0; /* 确保flex子项可以收缩 */
-    position: relative;
-    z-index: 1;
-    height: 100%; /* 确保占满高度 */
-}
+/* Left Panel - 样式已移至固定布局设计部分 */
 
 .folder-selection {
     padding: 15px;
@@ -481,13 +481,7 @@ body, html {
     color: #666;
 }
 
-/* Right Panel */
-.right-panel {
-    width: 40%;
-    display: flex;
-    flex-direction: column;
-    background-color: #fff;
-}
+/* Right Panel - 样式已移至固定布局设计部分 */
 
 .config-header {
     background-color: #f8f9fa;
@@ -598,15 +592,18 @@ body, html {
     flex-direction: column;
 }
 
-/* Progress Section */
+/* Progress Section - 固定高度不变 */
 .progress-section {
-    height: 300px;
+    height: 300px !important; /* 强制固定高度 */
+    min-height: 300px !important; /* 确保最小高度 */
+    max-height: 300px !important; /* 确保最大高度 */
     background-color: #fff;
     border-top: 1px solid #e0e0e0;
     display: flex;
     flex-direction: column;
     position: relative;
     z-index: 10;
+    flex-shrink: 0 !important; /* 确保不会被压缩 */
 }
 
 .progress-header {
@@ -1033,34 +1030,33 @@ input[type="range"]::-moz-range-thumb {
     background: #f8f9fa;
 }
 
-/* 响应式设计 */
-@media (max-width: 1200px) {
-    .left-panel {
-        width: 65%;
-    }
-    
-    .right-panel {
-        width: 35%;
-    }
+/* 固定布局设计 - 左右结构不变 */
+.container {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    /* 强制保持左右布局，不响应屏幕尺寸变化 */
+    flex-direction: row !important;
 }
 
-@media (max-width: 900px) {
-    .container {
-        flex-direction: column;
-    }
-    
-    .left-panel,
-    .right-panel {
-        width: 100%;
-    }
-    
-    .left-panel {
-        height: 60%;
-    }
-    
-    .right-panel {
-        height: 40%;
-    }
+.left-panel {
+    width: 60%;
+    min-width: 400px; /* 设置最小宽度确保可用性 */
+    display: flex;
+    flex-direction: column;
+    background-color: #fff;
+    border-right: 1px solid #e0e0e0;
+    position: relative;
+    z-index: 1;
+    height: 100%;
+}
+
+.right-panel {
+    width: 40%;
+    min-width: 300px; /* 设置最小宽度确保可用性 */
+    display: flex;
+    flex-direction: column;
+    background-color: #fff;
 }
 
 :root {
@@ -1243,15 +1239,13 @@ input[type="range"]::-moz-range-thumb {
     overflow: visible;
 }
 
-/* 针对小屏幕的响应式调整 */
-@media (max-width: 1200px) {
-    .video-info-detail {
-        font-size: 11px;
-    }
-    
-    .video-info-detail .label {
-        min-width: 45px;
-    }
+/* 固定视频信息样式 */
+.video-info-detail {
+    font-size: 12px !important; /* 固定字体大小 */
+}
+
+.video-info-detail .label {
+    min-width: 50px !important; /* 固定标签宽度 */
 }
 
 /* 文件输入组样式 */
@@ -1601,133 +1595,85 @@ input[type="range"]::-moz-range-thumb {
     z-index: 5;
 }
 
-/* 响应式调整 */
-@media (max-width: 550px) {
-    .video-player-wrapper {
-        width: 367px;
-        height: 207px;
-    }
-    
-    .preview-info {
-        width: 367px;
-        font-size: 12px;
-    }
-    
-    #video-info div {
-        font-size: inherit;
-    }
+/* 固定视频播放器样式 - 不响应屏幕变化 */
+.video-player-wrapper {
+    width: 474px !important; /* 固定宽度 */
+    height: 267px !important; /* 固定高度 */ 
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    border: 2px solid #e0e0e0 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+    z-index: 1 !important;
 }
 
-@media (max-width: 400px) {
-    .video-player-wrapper {
-        width: 261px;
-        height: 147px;
-    }
-    
-    .preview-info {
-        width: 261px;
-        font-size: 11px;
-        padding: 10px 12px;
-    }
-    
-    #video-info div {
-        font-size: inherit !important;
-    }
+.preview-info {
+    width: 474px !important; /* 与播放器同宽 */
+    margin: 12px auto 0 auto !important;
+    font-size: 13px !important; /* 固定字体大小 */
+    padding: 12px 16px !important; /* 固定内边距 */
 }
 
-@media (max-width: 290px) {
-    .video-player-wrapper {
-        width: 154px;
-        height: 87px;
-    }
-    
-    .preview-info {
-        width: 154px;
-        padding: 8px 10px;
-        font-size: 10px;
-    }
-    
-    #video-info div {
-        font-size: inherit !important;
-    }
-    
-    .video-preview-container {
-        padding: 12px;
-    }
+#video-info div {
+    font-size: 13px !important; /* 固定字体大小 */
 }
 
-@media (max-width: 768px) {
-    .resize-handle {
-        width: 12px;
-        height: 12px;
-    }
-    
-    .resize-handle.nw {
-        top: -6px;
-        left: -6px;
-    }
-    
-    .resize-handle.ne {
-        top: -6px;
-        right: -6px;
-    }
-    
-    .resize-handle.sw {
-        bottom: -6px;
-        left: -6px;
-    }
-    
-    .resize-handle.se {
-        bottom: -6px;
-        right: -6px;
-    }
-    
-    /* 确保底部栏在小屏幕下仍然固定显示 */
-    .bottom-bar {
-        display: flex !important;
-        flex-shrink: 0 !important;
-        min-height: 50px !important;
-        padding: 10px 15px !important;
-    }
-    
-    .file-count {
-        font-size: 12px !important;
-    }
-    
-    .action-buttons {
-        gap: 6px !important;
-    }
-    
-    .action-buttons .btn {
-        padding: 6px 12px !important;
-        font-size: 12px !important;
-    }
+.video-preview-container {
+    padding: 16px !important; /* 固定内边距 */
 }
 
-/* 超小屏幕下确保底部栏可见 */
-@media (max-width: 480px) {
-    .bottom-bar {
-        display: flex !important;
-        flex-direction: column !important;
-        gap: 8px !important;
-        padding: 8px 10px !important;
-        min-height: 70px !important;
-    }
-    
-    .file-count {
-        text-align: center !important;
-        font-size: 11px !important;
-    }
-    
-    .action-buttons {
-        justify-content: center !important;
-        flex-wrap: wrap !important;
-        gap: 4px !important;
-    }
-    
-    .action-buttons .btn {
-        padding: 4px 8px !important;
-        font-size: 11px !important;
-        min-width: 80px !important;
-    }
+/* 固定调整手柄样式 - 保持一致的用户体验 */
+.resize-handle {
+    width: 10px;
+    height: 10px;
+}
+
+.resize-handle.nw {
+    top: -5px;
+    left: -5px;
+}
+
+.resize-handle.ne {
+    top: -5px;
+    right: -5px;
+}
+
+.resize-handle.sw {
+    bottom: -5px;
+    left: -5px;
+}
+
+.resize-handle.se {
+    bottom: -5px;
+    right: -5px;
+}
+
+/* 固定底部栏样式 - 不响应屏幕变化 */
+.bottom-bar {
+    display: flex !important;
+    flex-direction: row !important; /* 强制保持行布局 */
+    justify-content: space-between !important;
+    align-items: center !important;
+    gap: 10px !important;
+    padding: 10px 15px !important;
+    min-height: 60px !important;
+    flex-shrink: 0 !important;
+    position: relative !important;
+    z-index: 15 !important;
+}
+
+.file-count {
+    font-size: 14px !important;
+    color: #666 !important;
+}
+
+.action-buttons {
+    display: flex !important;
+    gap: 8px !important;
+    align-items: center !important;
+}
+
+.action-buttons .btn {
+    padding: 8px 16px !important;
+    font-size: 13px !important;
 } 
