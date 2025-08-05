@@ -50,14 +50,18 @@
     ],
     "extraResources": [
       {
-        "from": "bin",
-        "to": "bin",
-        "filter": ["**/*"]
+        "from": "bin/win",
+        "to": "bin/win"
+      },
+      {
+        "from": "bin/mac",
+        "to": "bin/mac"
       }
     ],
     "asarUnpack": [
       "bin/**/*"
     ],
+    "forceCodeSigning": false,
     "nsis": {
       "allowToChangeInstallationDirectory": true,
       "oneClick": false,
@@ -66,7 +70,6 @@
       "deleteAppDataOnUninstall": true
     },
     "mac": {
-      "icon": "src/assets/icons/media.ico",
       "category": "public.app-category.utilities",
       "target": [
         {
@@ -76,18 +79,10 @@
       ]
     },
     "win": {
-      "icon": "src/assets/icons/media.ico",
       "target": [
         {
           "target": "nsis",
           "arch": ["x64"]
-        }
-      ],
-      "extraResources": [
-        {
-          "from": "bin/win",
-          "to": "bin/win",
-          "filter": ["**/*"]
         }
       ]
     }
