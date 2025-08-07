@@ -364,7 +364,7 @@ async function processVideoLogoWatermark(inputPath, outputPath, options, logCall
 /**
  * 处理LOGO水印视频
  */
-async function processLogoWatermark(progressCallback, logCallback, outputPath, files, options) {
+async function processLogoWatermark(progressCallback, logCallback, outputPath, files, options, shouldStopCallback = null) {
     // 创建输出目录
     await fs.mkdir(outputPath, { recursive: true });
     
@@ -378,6 +378,14 @@ async function processLogoWatermark(progressCallback, logCallback, outputPath, f
     let errorCount = 0;
     
     for (let i = 0; i < files.length; i++) {
+        // 检查是否应该停止处理
+        if (shouldStopCallback && shouldStopCallback()) {
+            if (logCallback) {
+                logCallback('warning', '⏹️ LOGO水印处理被用户停止');
+            }
+            throw new Error('LOGO水印处理被用户停止');
+        }
+        
         const file = files[i];
         
         try {

@@ -13,6 +13,9 @@ const { processLogoWatermark } = require('./src/js/processors/logo-watermark-pro
 // 保持窗口对象的全局引用
 let mainWindow;
 
+// 全局处理控制标志
+let shouldStopProcessing = false;
+
 function createWindow() {
   // 创建浏览器窗口
   mainWindow = new BrowserWindow({
@@ -220,7 +223,8 @@ ipcMain.handle('process-selected-files', async (event, filePaths) => {
 // 处理MP3文件
 ipcMain.handle('process-mp3-files', async (event, { folderPath, outputPath, files, options }) => {
   try {
-    const result = await processMp3Files(progressCallback, logCallback, folderPath, outputPath, files, options);
+    const shouldStopCallback = () => shouldStopProcessing;
+    const result = await processMp3Files(progressCallback, logCallback, folderPath, outputPath, files, options, shouldStopCallback);
     return { success: true, result };
   } catch (error) {
     console.error('处理MP3文件时出错:', error);
@@ -231,7 +235,8 @@ ipcMain.handle('process-mp3-files', async (event, { folderPath, outputPath, file
 // 处理视频文件
 ipcMain.handle('process-video-files', async (event, { folderPath, outputPath, files, options }) => {
   try {
-    const result = await processVideoFiles(progressCallback, logCallback, folderPath, outputPath, files, options);
+    const shouldStopCallback = () => shouldStopProcessing;
+    const result = await processVideoFiles(progressCallback, logCallback, folderPath, outputPath, files, options, shouldStopCallback);
     return { success: true, result };
   } catch (error) {
     console.error('处理视频文件时出错:', error);
@@ -274,7 +279,8 @@ ipcMain.handle('get-default-output-path', async (event, sourcePath) => {
 // 视频合成处理
 ipcMain.handle('compose-videos', async (event, { outputPath, files, options }) => {
   try {
-    const result = await composeVideos(progressCallback, logCallback, outputPath, files, options);
+    const shouldStopCallback = () => shouldStopProcessing;
+    const result = await composeVideos(progressCallback, logCallback, outputPath, files, options, shouldStopCallback);
     return { success: true, result };
   } catch (error) {
     console.error('合成视频时出错:', error);
@@ -329,7 +335,8 @@ ipcMain.handle('select-outro-file', async () => {
 // 视频片头片尾处理
 ipcMain.handle('process-intro-outro', async (event, { outputPath, files, options }) => {
   try {
-    await processIntroOutro(progressCallback, logCallback, outputPath, files, options);
+    const shouldStopCallback = () => shouldStopProcessing;
+    await processIntroOutro(progressCallback, logCallback, outputPath, files, options, shouldStopCallback);
     return { success: true };
   } catch (error) {
     console.error('处理视频片头片尾时出错:', error);
@@ -384,10 +391,33 @@ ipcMain.handle('select-watermark-file', async () => {
 // 视频LOGO水印处理
 ipcMain.handle('process-logo-watermark-videos', async (event, { outputPath, files, options }) => {
   try {
-    await processLogoWatermark(progressCallback, logCallback, outputPath, files, options);
+    const shouldStopCallback = () => shouldStopProcessing;
+    await processLogoWatermark(progressCallback, logCallback, outputPath, files, options, shouldStopCallback);
     return { success: true };
   } catch (error) {
     console.error('处理视频LOGO水印时出错:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 停止处理
+ipcMain.handle('stop-processing', async (event) => {
+  try {
+    shouldStopProcessing = true;
+    return { success: true };
+  } catch (error) {
+    console.error('停止处理时出错:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 重置停止标志
+ipcMain.handle('reset-stop-flag', async (event) => {
+  try {
+    shouldStopProcessing = false;
+    return { success: true };
+  } catch (error) {
+    console.error('重置停止标志时出错:', error);
     return { success: false, error: error.message };
   }
 }); 

@@ -208,7 +208,7 @@ function needsPreprocessingForIntroOutro(referenceVideo, introInfo, outroInfo, l
  * @param {Array} files - 要处理的文件列表
  * @param {Object} options - 处理选项
  */
-async function processIntroOutro(progressCallback, logCallback, outputPath, files, options) {
+async function processIntroOutro(progressCallback, logCallback, outputPath, files, options, shouldStopCallback = null) {
     const outputDir = path.dirname(outputPath);
     await fs.mkdir(outputDir, { recursive: true });
 
@@ -232,6 +232,14 @@ async function processIntroOutro(progressCallback, logCallback, outputPath, file
     let errorCount = 0;
 
     for (let i = 0; i < files.length; i++) {
+        // 检查是否应该停止处理
+        if (shouldStopCallback && shouldStopCallback()) {
+            if (logCallback) {
+                logCallback('warning', '⏹️ 片头片尾处理被用户停止');
+            }
+            throw new Error('片头片尾处理被用户停止');
+        }
+        
         const file = files[i];
         
         try {
@@ -270,7 +278,7 @@ async function processIntroOutro(progressCallback, logCallback, outputPath, file
                 introTrimSeconds,
                 outroTrimSeconds,
                 quality
-            }, logCallback, progressCallback);
+            }, logCallback, progressCallback, shouldStopCallback);
 
             successCount++;
             
@@ -303,7 +311,7 @@ async function processIntroOutro(progressCallback, logCallback, outputPath, file
 /**
  * 智能处理单个视频的片头片尾（参考video-composer.js逻辑）
  */
-async function processVideoIntroOutroSmart(inputPath, outputPath, options, logCallback, progressCallback) {
+async function processVideoIntroOutroSmart(inputPath, outputPath, options, logCallback, progressCallback, shouldStopCallback = null) {
     const {
         replaceIntro,
         replaceOutro,
@@ -446,7 +454,8 @@ async function processVideoIntroOutroSmart(inputPath, outputPath, options, logCa
                     introInfo, 
                     outroInfo, 
                     tempDir, 
-                    logCallback
+                    logCallback,
+                    shouldStopCallback
                 );
                 
                 processedMainVideo = tsResults.mainVideo || processedMainVideo;
@@ -463,7 +472,8 @@ async function processVideoIntroOutroSmart(inputPath, outputPath, options, logCa
                     originalVideoInfo,
                     preprocessingResult.filesToPreprocess,
                     tempDir,
-                    logCallback
+                    logCallback,
+                    shouldStopCallback
                 );
                 
                 if (preprocessResults.introFile) {
@@ -511,20 +521,27 @@ async function processVideoIntroOutroSmart(inputPath, outputPath, options, logCa
 
     } finally {
         // 清理临时文件和目录
+        let cleanedFiles = 0;
         for (const tempFile of tempFiles) {
             try {
                 await fs.unlink(tempFile);
+                cleanedFiles++;
             } catch (error) {
-                // 忽略清理错误
+                // 忽略清理错误（文件可能不存在）
             }
         }
         
         if (tempDir) {
             try {
                 await fs.rmdir(tempDir, { recursive: true });
+                if (logCallback && cleanedFiles > 0) {
+                    logCallback('info', `🧹 清理完成: ${cleanedFiles} 个临时文件和临时目录`);
+                }
             } catch (error) {
-                // 忽略清理错误
+                // 忽略清理错误（目录可能不存在）
             }
+        } else if (logCallback && cleanedFiles > 0) {
+            logCallback('info', `🧹 清理完成: ${cleanedFiles} 个临时文件`);
         }
     }
 }
@@ -532,7 +549,7 @@ async function processVideoIntroOutroSmart(inputPath, outputPath, options, logCa
 /**
  * 快速TS转换用于片头片尾处理
  */
-async function convertToTSFormatIntroOutro(originalVideoInfo, introInfo, outroInfo, tempDir, logCallback) {
+async function convertToTSFormatIntroOutro(originalVideoInfo, introInfo, outroInfo, tempDir, logCallback, shouldStopCallback = null) {
     const results = {
         mainVideo: null,
         introFile: null,
@@ -567,6 +584,14 @@ async function convertToTSFormatIntroOutro(originalVideoInfo, introInfo, outroIn
         }
     }
 
+    // 检查是否应该停止处理
+    if (shouldStopCallback && shouldStopCallback()) {
+        if (logCallback) {
+            logCallback('warning', '⏹️ 片头片尾TS转换被用户停止');
+        }
+        throw new Error('片头片尾TS转换被用户停止');
+    }
+    
     // 转换片尾文件
     if (outroInfo) {
         const tsOutroPath = path.join(tempDir, 'outro.ts');
@@ -596,7 +621,7 @@ async function convertToTSFormatIntroOutro(originalVideoInfo, introInfo, outroIn
 /**
  * 完整重编码预处理片头片尾文件
  */
-async function preprocessIntroOutroFiles(referenceVideo, filesToPreprocess, tempDir, logCallback) {
+async function preprocessIntroOutroFiles(referenceVideo, filesToPreprocess, tempDir, logCallback, shouldStopCallback = null) {
     const results = {
         introFile: null,
         outroFile: null
@@ -608,6 +633,14 @@ async function preprocessIntroOutroFiles(referenceVideo, filesToPreprocess, temp
     }
 
     for (const fileToPreprocess of filesToPreprocess) {
+        // 检查是否应该停止处理
+        if (shouldStopCallback && shouldStopCallback()) {
+            if (logCallback) {
+                logCallback('warning', '⏹️ 片头片尾预处理被用户停止');
+            }
+            throw new Error('片头片尾预处理被用户停止');
+        }
+        
         const { type, info } = fileToPreprocess;
         const outputFileName = `preprocessed_${type}.mp4`;
         const outputPath = path.join(tempDir, outputFileName);

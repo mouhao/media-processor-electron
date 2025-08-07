@@ -297,7 +297,7 @@ function needsPreprocessing(videoInfos, targetFormat, targetResolution, logCallb
 }
 
 // 快速TS转换方法 - 无损流拷贝，速度快
-async function convertToTSFormat(videoInfos, outputDir, progressCallback, logCallback) {
+async function convertToTSFormat(videoInfos, outputDir, progressCallback, logCallback, shouldStopCallback = null) {
     const tsFiles = [];
     const tempDir = path.join(outputDir, 'temp_ts');
     await fs.mkdir(tempDir, { recursive: true });
@@ -307,6 +307,14 @@ async function convertToTSFormat(videoInfos, outputDir, progressCallback, logCal
     }
     
     for (let i = 0; i < videoInfos.length; i++) {
+        // 检查是否应该停止处理
+        if (shouldStopCallback && shouldStopCallback()) {
+            if (logCallback) {
+                logCallback('warning', '⏹️ TS转换被用户停止');
+            }
+            throw new Error('TS转换被用户停止');
+        }
+        
         const video = videoInfos[i];
         const tsFileName = `${i + 1}_${path.basename(video.fileName, path.extname(video.fileName))}.ts`;
         const tsPath = path.join(tempDir, tsFileName);
@@ -368,7 +376,7 @@ async function convertToTSFormat(videoInfos, outputDir, progressCallback, logCal
 }
 
 // 预处理视频文件 - 以第一个视频为基准
-async function preprocessVideos(videoInfos, analysisResult, outputDir, progressCallback, logCallback) {
+async function preprocessVideos(videoInfos, analysisResult, outputDir, progressCallback, logCallback, shouldStopCallback = null) {
     const preprocessedFiles = [];
     const tempDir = path.join(outputDir, 'temp_preprocessed');
     await fs.mkdir(tempDir, { recursive: true });
@@ -383,6 +391,14 @@ async function preprocessVideos(videoInfos, analysisResult, outputDir, progressC
     
     // 首先添加基准视频（不需要预处理）
     for (let i = 0; i < videoInfos.length; i++) {
+        // 检查是否应该停止处理
+        if (shouldStopCallback && shouldStopCallback()) {
+            if (logCallback) {
+                logCallback('warning', '⏹️ 视频预处理被用户停止');
+            }
+            throw new Error('视频预处理被用户停止');
+        }
+        
         const videoInfo = videoInfos[i];
         const needsPreprocessing = videosToPreprocess.find(v => v.index === i);
         
@@ -482,7 +498,7 @@ function findOptimalFrameRate(frameRates) {
     return closestStandard;
 }
 
-async function composeVideos(progressCallback, logCallback, outputPath, files, options) {
+async function composeVideos(progressCallback, logCallback, outputPath, files, options, shouldStopCallback = null) {
     const { composeType, format } = options;
     
     // 生成智能文件夹名
@@ -501,6 +517,14 @@ async function composeVideos(progressCallback, logCallback, outputPath, files, o
     let actualFiles = files; // 用于合成的实际文件（原文件或预处理后的文件）
     
     try {
+        // 检查是否应该停止处理
+        if (shouldStopCallback && shouldStopCallback()) {
+            if (logCallback) {
+                logCallback('warning', '⏹️ 视频合成被用户停止');
+            }
+            throw new Error('视频合成被用户停止');
+        }
+        
         // 生成输出文件名，根据格式添加正确的扩展名
         let outputFileName;
         if (files.length === 1) {
@@ -542,7 +566,8 @@ async function composeVideos(progressCallback, logCallback, outputPath, files, o
                 videoInfos, 
                 outputDir, 
                 progressCallback, 
-                logCallback
+                logCallback,
+                shouldStopCallback
             );
             
             tempDir = tempDirPath;
@@ -557,7 +582,8 @@ async function composeVideos(progressCallback, logCallback, outputPath, files, o
                 analysis, 
                 outputDir, 
                 progressCallback, 
-                logCallback
+                logCallback,
+                shouldStopCallback
             );
             
             tempDir = tempDirPath;
@@ -642,13 +668,49 @@ async function composeVideos(progressCallback, logCallback, outputPath, files, o
         return { processed: 1, failed: 0 };
         
     } catch (error) {
-        // 错误时也要清理临时文件
+        // 错误时清理所有可能的临时文件
+        const tempDirsToClean = [];
+        
+        // 添加已知的tempDir
         if (tempDir) {
-            try {
-                await fs.rmdir(tempDir, { recursive: true });
-            } catch (cleanupError) {
-                // 忽略清理错误
+            tempDirsToClean.push(tempDir);
+        }
+        
+        // 添加可能存在的标准临时目录
+        const possibleTempDirs = [
+            path.join(outputDir, 'temp_ts'),
+            path.join(outputDir, 'temp_preprocessed')
+        ];
+        
+        for (const dir of possibleTempDirs) {
+            if (!tempDirsToClean.includes(dir)) {
+                tempDirsToClean.push(dir);
             }
+        }
+        
+        // 清理所有临时目录
+        for (const dir of tempDirsToClean) {
+            try {
+                await fs.rmdir(dir, { recursive: true });
+                if (logCallback) {
+                    logCallback('info', `🧹 清理临时目录: ${path.basename(dir)}`);
+                }
+            } catch (cleanupError) {
+                // 忽略清理错误（目录可能不存在）
+            }
+        }
+        
+        // 检查输出目录是否为空，如果是则也删除它
+        try {
+            const outputDirContents = await fs.readdir(outputDir);
+            if (outputDirContents.length === 0) {
+                await fs.rmdir(outputDir);
+                if (logCallback) {
+                    logCallback('info', `🧹 清理空的输出目录: ${path.basename(outputDir)}`);
+                }
+            }
+        } catch (cleanupError) {
+            // 忽略清理错误
         }
         
         if (logCallback) {

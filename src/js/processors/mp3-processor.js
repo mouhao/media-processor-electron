@@ -3,7 +3,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { getMp3Bitrate, ffmpegPath, generateUniqueFilename } = require('./common-processor');
 
-async function processMp3Files(progressCallback, logCallback, folderPath, outputPath, files, options) {
+async function processMp3Files(progressCallback, logCallback, folderPath, outputPath, files, options, shouldStopCallback = null) {
     const { bitrate = 64, threshold = 64, keepStructure = true, forceProcess = false, encodingMode = 'abr' } = options;
     await fs.mkdir(outputPath, { recursive: true });
 
@@ -17,6 +17,14 @@ async function processMp3Files(progressCallback, logCallback, folderPath, output
     }
 
     for (const file of files) {
+        // 检查是否应该停止处理
+        if (shouldStopCallback && shouldStopCallback()) {
+            if (logCallback) {
+                logCallback('warning', '⏹️ 处理被用户停止');
+            }
+            throw new Error('处理被用户停止');
+        }
+        
         progressCallback({ current: processedCount, total: totalFiles, file: file.name, status: 'processing' });
 
         try {

@@ -66,7 +66,7 @@
       "deleteAppDataOnUninstall": true
     },
     "mac": {
-      "icon": "src/assets/icons/media.ico",
+      "icon": "src/assets/icons/media.png",
       "category": "public.app-category.utilities",
       "target": [
         {
@@ -76,7 +76,7 @@
       ]
     },
     "win": {
-      "icon": "src/assets/icons/media.ico",
+      "icon": "src/assets/icons/media.png",
       "target": [
         {
           "target": "nsis",

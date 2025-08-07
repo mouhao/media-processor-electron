@@ -179,7 +179,7 @@ function executeFFmpeg(args, logCallback, progressCallback = null, totalDuration
     });
 }
 
-async function processVideoFiles(progressCallback, logCallback, folderPath, outputPath, files, options) {
+async function processVideoFiles(progressCallback, logCallback, folderPath, outputPath, files, options, shouldStopCallback = null) {
     const outputDir = path.join(outputPath, 'video_output');
     await fs.mkdir(outputDir, { recursive: true });
 
@@ -193,6 +193,14 @@ async function processVideoFiles(progressCallback, logCallback, folderPath, outp
     }
 
     for (const file of files) {
+        // 检查是否应该停止处理
+        if (shouldStopCallback && shouldStopCallback()) {
+            if (logCallback) {
+                logCallback('warning', '⏹️ 处理被用户停止');
+            }
+            throw new Error('处理被用户停止');
+        }
+        
         try {
             // 创建单个文件的进度回调函数
             const fileProgressCallback = progressCallback ? (progress) => {

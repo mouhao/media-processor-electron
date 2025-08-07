@@ -20,6 +20,8 @@ class MediaProcessorApp {
         this.selectedFiles = [];
         this.currentFileType = 'mp3';
         this.isProcessing = false;
+        this.currentFFmpegProcess = null;
+        this.shouldStopProcessing = false;
         
         // 文件信息加载状态
         this.isLoadingFileDetails = false;
@@ -143,6 +145,7 @@ class MediaProcessorApp {
         this.progressText = document.getElementById('progress-text');
         this.progressSpinner = document.getElementById('progress-spinner');
         this.clearLogBtn = document.getElementById('clear-log-btn');
+        this.stopProcessBtn = document.getElementById('stop-process-btn');
         
         // 进度条动画相关属性
         this.simulatedProgress = 0;
@@ -278,6 +281,9 @@ class MediaProcessorApp {
         
         // 清除日志按钮
         this.clearLogBtn.addEventListener('click', () => this.clearLog());
+        
+        // 停止处理按钮
+        this.stopProcessBtn.addEventListener('click', () => this.stopProcessing());
         
         // 处理按钮
         this.processBtn.addEventListener('click', () => this.startProcessing());
@@ -1235,9 +1241,18 @@ class MediaProcessorApp {
         }
         
         this.isProcessing = true;
+        this.shouldStopProcessing = false;
         this.processBtn.disabled = true;
         this.removeSelectedBtn.disabled = true;
+        this.stopProcessBtn.disabled = false;
         this.processBtn.textContent = '⏳ 处理中...';
+        
+        // 重置主进程的停止标志
+        try {
+            await ipcRenderer.invoke('reset-stop-flag');
+        } catch (error) {
+            console.error('重置停止标志失败:', error);
+        }
         
         // 启动模拟进度
         this.startSimulatedProgress('analyzing', '正在分析文件...');
@@ -1255,10 +1270,17 @@ class MediaProcessorApp {
                 await this.processLogoWatermarkVideos();
             }
         } catch (error) {
-            this.addLog('error', `处理失败: ${error.message}`);
+            if (this.shouldStopProcessing) {
+                this.addLog('warning', '⏹️ 处理已被用户停止');
+            } else {
+                this.addLog('error', `处理失败: ${error.message}`);
+            }
         } finally {
             this.isProcessing = false;
+            this.currentFFmpegProcess = null;
+            this.shouldStopProcessing = false;
             this.processBtn.textContent = '🚀 开始处理';
+            this.stopProcessBtn.disabled = true;
             this.updateFileCount(); // 恢复按钮状态
             
             // 显示完成状态，然后重置
@@ -1266,6 +1288,21 @@ class MediaProcessorApp {
             setTimeout(() => {
                 this.updateProgress({ type: this.currentFileType, current: 0, total: 0, status: 'idle' });
             }, 2000);
+        }
+    }
+
+    async stopProcessing() {
+        if (!this.isProcessing) return;
+        
+        this.addLog('warning', '⏹️ 正在停止处理...');
+        this.shouldStopProcessing = true;
+        
+        try {
+            // 通知主进程停止处理
+            await ipcRenderer.invoke('stop-processing');
+            this.addLog('info', '✅ 已发送停止信号，等待处理完成...');
+        } catch (error) {
+            this.addLog('error', `❌ 发送停止信号失败: ${error.message}`);
         }
     }
 
