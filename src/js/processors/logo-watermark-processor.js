@@ -108,8 +108,8 @@ function buildFilterString(options, videoInfo) {
         logoInput = `[${inputIndex}:v]`;
         inputIndex++;
         
-        // 计算LOGO的缩放和透明度
-        let logoFilter = `${logoInput}scale=${options.logoWidth}:${options.logoHeight}`;
+        // 计算LOGO的缩放，保持原始宽高比
+        let logoFilter = `${logoInput}scale=${options.logoWidth}:${options.logoHeight}:force_original_aspect_ratio=decrease`;
         if (options.logoOpacity < 1) {
             logoFilter += `,format=rgba,colorchannelmixer=aa=${options.logoOpacity}`;
         }
@@ -133,8 +133,8 @@ function buildFilterString(options, videoInfo) {
     if (options.addWatermark) {
         watermarkInput = `[${inputIndex}:v]`;
         
-        // 计算水印的缩放和透明度
-        let watermarkFilter = `${watermarkInput}scale=${options.watermarkWidth}:${options.watermarkHeight}`;
+        // 计算水印的缩放，保持原始宽高比
+        let watermarkFilter = `${watermarkInput}scale=${options.watermarkWidth}:${options.watermarkHeight}:force_original_aspect_ratio=decrease`;
         if (options.watermarkOpacity < 1) {
             watermarkFilter += `,format=rgba,colorchannelmixer=aa=${options.watermarkOpacity}`;
         }

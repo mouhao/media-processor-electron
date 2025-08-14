@@ -2680,10 +2680,26 @@ class MediaProcessorApp {
         const element = type === 'logo' ? this.logoOverlay : this.watermarkOverlay;
         if (!element) return;
         
-        // 计算合适的初始大小（基于视频显示尺寸的比例）
+        // 获取图片元素
+        const imgElement = element.querySelector('img');
+        if (!imgElement || !imgElement.src) return;
+        
+        // 计算合适的初始大小，保持图片原始宽高比
         const initialSize = Math.min(this.videoDisplaySize.width, this.videoDisplaySize.height) * 0.15; // 15%的视频尺寸
         const minSize = 40; // 最小尺寸
-        const size = Math.max(minSize, initialSize);
+        let size = Math.max(minSize, initialSize);
+        
+        // 如果图片已加载，计算保持宽高比的尺寸
+        if (imgElement.naturalWidth && imgElement.naturalHeight) {
+            const aspectRatio = imgElement.naturalWidth / imgElement.naturalHeight;
+            if (aspectRatio > 1) {
+                // 宽图，以高度为基准
+                size = Math.max(minSize, Math.min(size, initialSize * aspectRatio));
+            } else {
+                // 高图，以宽度为基准
+                size = Math.max(minSize, Math.min(size, initialSize / aspectRatio));
+            }
+        }
         
         // 计算初始位置
         let x, y;
@@ -2712,6 +2728,21 @@ class MediaProcessorApp {
     setOverlayPosition(type, x, y, width, height) {
         const element = type === 'logo' ? this.logoOverlay : this.watermarkOverlay;
         if (!element) return;
+        
+        // 获取图片元素以保持宽高比
+        const imgElement = element.querySelector('img');
+        if (imgElement && imgElement.naturalWidth && imgElement.naturalHeight) {
+            const aspectRatio = imgElement.naturalWidth / imgElement.naturalHeight;
+            
+            // 根据拖拽方向调整尺寸以保持宽高比
+            if (width > height) {
+                // 水平拖拽，以高度为基准
+                height = width / aspectRatio;
+            } else {
+                // 垂直拖拽，以宽度为基准
+                width = height * aspectRatio;
+            }
+        }
         
         element.style.left = x + 'px';
         element.style.top = y + 'px';
@@ -2930,6 +2961,36 @@ class MediaProcessorApp {
             } else if (handle.classList.contains('sw') || handle.classList.contains('se')) {
                 newHeight = this.videoDisplayOffset.y + this.videoDisplaySize.height - newY;
             }
+        }
+        
+        // 保持图片原始宽高比
+        const imgElement = element.querySelector('img');
+        if (imgElement && imgElement.naturalWidth && imgElement.naturalHeight) {
+            const aspectRatio = imgElement.naturalWidth / imgElement.naturalHeight;
+            
+            // 根据拖拽方向调整尺寸以保持宽高比
+            if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                // 水平拖拽为主，以宽度为基准
+                newHeight = newWidth / aspectRatio;
+                // 调整Y位置以保持中心点
+                if (handle.classList.contains('sw') || handle.classList.contains('nw')) {
+                    newY = this.elementStartPos.y + this.resizeStartSize.height - newHeight;
+                }
+            } else {
+                // 垂直拖拽为主，以高度为基准
+                newWidth = newHeight * aspectRatio;
+                // 调整X位置以保持中心点
+                if (handle.classList.contains('sw') || handle.classList.contains('ne')) {
+                    newX = this.elementStartPos.x + this.resizeStartSize.width - newWidth;
+                }
+            }
+            
+            // 重新检查边界限制
+            const maxX = this.videoDisplayOffset.x + this.videoDisplaySize.width - newWidth;
+            const maxY = this.videoDisplayOffset.y + this.videoDisplaySize.height - newHeight;
+            
+            newX = Math.max(this.videoDisplayOffset.x, Math.min(newX, maxX));
+            newY = Math.max(this.videoDisplayOffset.y, Math.min(newY, maxY));
         }
         
         // 再次确保最小尺寸
