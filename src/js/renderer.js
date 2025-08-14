@@ -549,18 +549,17 @@ class MediaProcessorApp {
                 const files = useMultiSelect ? result.files : [result.file];
                 this.addLog('info', `📄 选择了 ${files.length} 个文件到 ${this.getFileTypeName()} 标签`);
                 
-                // 如果之前没有设置当前文件夹，使用第一个文件的目录
-                if (!this.currentFolder) {
-                    const firstFilePath = files[0];
-                    this.currentFolder = path.dirname(firstFilePath);
-                }
+                // 更新当前文件夹为第一个文件的目录
+                const firstFilePath = files[0];
+                this.currentFolder = path.dirname(firstFilePath);
                 
-                // 如果没有设置输出路径，设置默认输出路径
-                if (!this.outputFolder.value) {
+                // 对于LOGO水印模式，每次选择新文件时都更新输出路径
+                // 对于其他模式，只在没有设置输出路径时设置默认路径
+                if (this.currentFileType === 'logo-watermark' || !this.outputFolder.value) {
                     const defaultOutputPath = await ipcRenderer.invoke('get-default-output-path', this.currentFolder);
                     if (defaultOutputPath.success) {
                         this.outputFolder.value = defaultOutputPath.path;
-                        this.addLog('info', `📁 默认输出路径: ${defaultOutputPath.path}`);
+                        this.addLog('info', `📁 输出路径已更新: ${defaultOutputPath.path}`);
                     }
                 }
                 
@@ -695,6 +694,17 @@ class MediaProcessorApp {
                 // 如果是LOGO水印模式且有文件，自动加载到视频预览器
                 if (this.currentFileType === 'logo-watermark' && targetFiles.length > 0) {
                     this.loadVideoPreview(targetFiles[0]);
+                    
+                    // 更新输出路径为当前文件的同级目录
+                    const currentFilePath = targetFiles[0];
+                    const currentFolder = path.dirname(currentFilePath);
+                    this.currentFolder = currentFolder;
+                    
+                    const defaultOutputPath = await ipcRenderer.invoke('get-default-output-path', currentFolder);
+                    if (defaultOutputPath.success) {
+                        this.outputFolder.value = defaultOutputPath.path;
+                        this.addLog('info', `📁 输出路径已更新为当前文件目录: ${defaultOutputPath.path}`);
+                    }
                 }
                 
                 // 报告结果
