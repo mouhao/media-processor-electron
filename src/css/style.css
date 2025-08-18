@@ -942,6 +942,37 @@ body, html {
     border: 1px solid #ced4da;
     border-radius: 3px;
     font-size: 12px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.position-input-group input:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.position-input-group input.input-valid {
+    border-color: #28a745;
+}
+
+.position-input-group input.input-warning {
+    border-color: #ffc107;
+    background-color: #fffbf0;
+}
+
+.position-input-group input.input-warning:focus {
+    border-color: #ffc107;
+    box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.25);
+}
+
+.position-input-group input.input-invalid {
+    border-color: #dc3545;
+    background-color: #fff5f5;
+}
+
+.position-input-group input.input-invalid:focus {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.25);
 }
 
 .position-input-group .unit {

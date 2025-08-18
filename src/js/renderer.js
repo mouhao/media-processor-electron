@@ -256,6 +256,10 @@ class MediaProcessorApp {
         this.watermarkWidthInput = document.getElementById('watermark-width');
         this.watermarkHeightInput = document.getElementById('watermark-height');
         
+        // 宽高比锁定控制
+        this.logoAspectRatioLock = document.getElementById('logo-aspect-ratio-lock');
+        this.watermarkAspectRatioLock = document.getElementById('watermark-aspect-ratio-lock');
+        
         // 拖拽状态
         this.isDragging = false;
         this.isResizing = false;
@@ -269,6 +273,11 @@ class MediaProcessorApp {
         this.videoRealSize = { width: 0, height: 0 }; // 视频真实分辨率
         this.videoDisplaySize = { width: 0, height: 0 }; // 视频在播放器中的实际显示尺寸
         this.videoDisplayOffset = { x: 0, y: 0 }; // 视频在播放器中的偏移位置
+        
+        // 图片宽高比信息
+        this.logoAspectRatio = null;
+        this.watermarkAspectRatio = null;
+        this.aspectRatioLocked = true; // 默认锁定宽高比
     }
 
     bindEvents() {
@@ -408,15 +417,17 @@ class MediaProcessorApp {
             radio.addEventListener('change', (e) => this.toggleWatermarkSettings(e.target.value === 'yes'));
         });
         
-        // 透明度滑块
+        // 透明度滑块 - 滑块值直接对应透明度百分比
         if (this.logoOpacity) {
             this.logoOpacity.addEventListener('input', (e) => {
-                this.logoOpacityValue.textContent = Math.round(e.target.value * 100) + '%';
+                const transparencyPercent = Math.round(e.target.value * 100);
+                this.logoOpacityValue.textContent = transparencyPercent + '%';
             });
         }
         if (this.watermarkOpacity) {
             this.watermarkOpacity.addEventListener('input', (e) => {
-                this.watermarkOpacityValue.textContent = Math.round(e.target.value * 100) + '%';
+                const transparencyPercent = Math.round(e.target.value * 100);
+                this.watermarkOpacityValue.textContent = transparencyPercent + '%';
             });
         }
         
@@ -440,15 +451,66 @@ class MediaProcessorApp {
         // 拖拽和缩放事件
         this.initializeDragAndResize();
         
-        // 位置输入框变化事件
-        if (this.logoXInput) this.logoXInput.addEventListener('input', () => this.updateOverlayFromInputs('logo'));
-        if (this.logoYInput) this.logoYInput.addEventListener('input', () => this.updateOverlayFromInputs('logo'));
-        if (this.logoWidthInput) this.logoWidthInput.addEventListener('input', () => this.updateOverlayFromInputs('logo'));
-        if (this.logoHeightInput) this.logoHeightInput.addEventListener('input', () => this.updateOverlayFromInputs('logo'));
-        if (this.watermarkXInput) this.watermarkXInput.addEventListener('input', () => this.updateOverlayFromInputs('watermark'));
-        if (this.watermarkYInput) this.watermarkYInput.addEventListener('input', () => this.updateOverlayFromInputs('watermark'));
-        if (this.watermarkWidthInput) this.watermarkWidthInput.addEventListener('input', () => this.updateOverlayFromInputs('watermark'));
-        if (this.watermarkHeightInput) this.watermarkHeightInput.addEventListener('input', () => this.updateOverlayFromInputs('watermark'));
+        // 位置输入框变化事件 - 改进用户体验
+        const debounce = (func, wait) => {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        };
+
+        // input事件：实时预览但不校正值
+        const updateLogoFromInputsDebounced = debounce(() => this.updateOverlayFromInputs('logo', false), 150);
+        const updateWatermarkFromInputsDebounced = debounce(() => this.updateOverlayFromInputs('watermark', false), 150);
+
+        // 为LOGO输入框添加事件
+        if (this.logoXInput) {
+            this.logoXInput.addEventListener('input', updateLogoFromInputsDebounced);
+            this.logoXInput.addEventListener('blur', () => this.updateOverlayFromInputs('logo', true, this.logoXInput));
+            this.logoXInput.addEventListener('change', () => this.updateOverlayFromInputs('logo', true, this.logoXInput));
+        }
+        if (this.logoYInput) {
+            this.logoYInput.addEventListener('input', updateLogoFromInputsDebounced);
+            this.logoYInput.addEventListener('blur', () => this.updateOverlayFromInputs('logo', true, this.logoYInput));
+            this.logoYInput.addEventListener('change', () => this.updateOverlayFromInputs('logo', true, this.logoYInput));
+        }
+        if (this.logoWidthInput) {
+            this.logoWidthInput.addEventListener('input', updateLogoFromInputsDebounced);
+            this.logoWidthInput.addEventListener('blur', () => this.updateOverlayFromInputs('logo', true, this.logoWidthInput));
+            this.logoWidthInput.addEventListener('change', () => this.updateOverlayFromInputs('logo', true, this.logoWidthInput));
+        }
+        if (this.logoHeightInput) {
+            this.logoHeightInput.addEventListener('input', updateLogoFromInputsDebounced);
+            this.logoHeightInput.addEventListener('blur', () => this.updateOverlayFromInputs('logo', true, this.logoHeightInput));
+            this.logoHeightInput.addEventListener('change', () => this.updateOverlayFromInputs('logo', true, this.logoHeightInput));
+        }
+
+        // 为水印输入框添加事件
+        if (this.watermarkXInput) {
+            this.watermarkXInput.addEventListener('input', updateWatermarkFromInputsDebounced);
+            this.watermarkXInput.addEventListener('blur', () => this.updateOverlayFromInputs('watermark', true, this.watermarkXInput));
+            this.watermarkXInput.addEventListener('change', () => this.updateOverlayFromInputs('watermark', true, this.watermarkXInput));
+        }
+        if (this.watermarkYInput) {
+            this.watermarkYInput.addEventListener('input', updateWatermarkFromInputsDebounced);
+            this.watermarkYInput.addEventListener('blur', () => this.updateOverlayFromInputs('watermark', true, this.watermarkYInput));
+            this.watermarkYInput.addEventListener('change', () => this.updateOverlayFromInputs('watermark', true, this.watermarkYInput));
+        }
+        if (this.watermarkWidthInput) {
+            this.watermarkWidthInput.addEventListener('input', updateWatermarkFromInputsDebounced);
+            this.watermarkWidthInput.addEventListener('blur', () => this.updateOverlayFromInputs('watermark', true, this.watermarkWidthInput));
+            this.watermarkWidthInput.addEventListener('change', () => this.updateOverlayFromInputs('watermark', true, this.watermarkWidthInput));
+        }
+        if (this.watermarkHeightInput) {
+            this.watermarkHeightInput.addEventListener('input', updateWatermarkFromInputsDebounced);
+            this.watermarkHeightInput.addEventListener('blur', () => this.updateOverlayFromInputs('watermark', true, this.watermarkHeightInput));
+            this.watermarkHeightInput.addEventListener('change', () => this.updateOverlayFromInputs('watermark', true, this.watermarkHeightInput));
+        }
 
         // 监听片头片尾时长输入变化
         const introTrimInput = document.getElementById('intro-trim-seconds');
@@ -1815,7 +1877,9 @@ class MediaProcessorApp {
                 this.addLog('error', '❌ 请选择LOGO图片文件');
                 return;
             }
-            logoOpacity = parseFloat(document.getElementById('logo-opacity').value) || 1;
+            // 滑块值是透明度，需要转换为不透明度（alpha值）给FFmpeg使用
+            const logoTransparency = parseFloat(document.getElementById('logo-opacity').value) || 0;
+            logoOpacity = 1 - logoTransparency; // 透明度转换为不透明度
             logoTimeMode = document.querySelector('input[name="logo-time-mode"]:checked').value;
             if (logoTimeMode === 'custom') {
                 logoStartTime = parseFloat(document.getElementById('logo-start-time').value) || 0;
@@ -1827,12 +1891,12 @@ class MediaProcessorApp {
             const logoYInput = document.getElementById('logo-y');
             logoX = logoXInput?.value === '' ? 50 : (parseInt(logoXInput?.value) || 0);
             logoY = logoYInput?.value === '' ? 50 : (parseInt(logoYInput?.value) || 0);
-            logoWidth = parseInt(document.getElementById('logo-width').value) || 100;
-            logoHeight = parseInt(document.getElementById('logo-height').value) || 100;
+            logoWidth = parseInt(document.getElementById('logo-width').value) || 345;
+            logoHeight = parseInt(document.getElementById('logo-height').value) || 230;
         }
 
         let watermarkFile = '';
-        let watermarkOpacity = 0.7;
+        let watermarkOpacity = 0.5; // 这是alpha值（不透明度），对应50%透明度
         let watermarkStartTime = 0;
         let watermarkEndTime = 0;
         let watermarkTimeMode = 'full';
@@ -1847,7 +1911,9 @@ class MediaProcessorApp {
                 this.addLog('error', '❌ 请选择水印图片文件');
                 return;
             }
-            watermarkOpacity = parseFloat(document.getElementById('watermark-opacity').value) || 0.7;
+            // 滑块值是透明度，需要转换为不透明度（alpha值）给FFmpeg使用
+            const watermarkTransparency = parseFloat(document.getElementById('watermark-opacity').value) || 0.5;
+            watermarkOpacity = 1 - watermarkTransparency; // 透明度转换为不透明度
             watermarkTimeMode = document.querySelector('input[name="watermark-time-mode"]:checked').value;
             if (watermarkTimeMode === 'custom') {
                 watermarkStartTime = parseFloat(document.getElementById('watermark-start-time').value) || 0;
@@ -1858,9 +1924,9 @@ class MediaProcessorApp {
             const watermarkXInput = document.getElementById('watermark-x');
             const watermarkYInput = document.getElementById('watermark-y');
             watermarkX = watermarkXInput?.value === '' ? 50 : (parseInt(watermarkXInput?.value) || 0);
-            watermarkY = watermarkYInput?.value === '' ? 200 : (parseInt(watermarkYInput?.value) || 0);
-            watermarkWidth = parseInt(document.getElementById('watermark-width').value) || 80;
-            watermarkHeight = parseInt(document.getElementById('watermark-height').value) || 80;
+            watermarkY = watermarkYInput?.value === '' ? 50 : (parseInt(watermarkYInput?.value) || 0);
+            watermarkWidth = parseInt(document.getElementById('watermark-width').value) || 345;
+            watermarkHeight = parseInt(document.getElementById('watermark-height').value) || 230;
         }
 
         const quality = document.getElementById('logo-watermark-quality').value || 'source-match';
@@ -2423,14 +2489,14 @@ class MediaProcessorApp {
         // 清除水印文件
         this.clearWatermarkFile();
         
-        // 重置透明度
+        // 重置透明度 - 滑块值现在直接对应透明度百分比
         if (this.logoOpacity) {
-            this.logoOpacity.value = 1;
-            if (this.logoOpacityValue) this.logoOpacityValue.textContent = '100%';
+            this.logoOpacity.value = 0; // 0%透明度（完全不透明）
+            if (this.logoOpacityValue) this.logoOpacityValue.textContent = '0%';
         }
         if (this.watermarkOpacity) {
-            this.watermarkOpacity.value = 0.7;
-            if (this.watermarkOpacityValue) this.watermarkOpacityValue.textContent = '70%';
+            this.watermarkOpacity.value = 0.5; // 50%透明度
+            if (this.watermarkOpacityValue) this.watermarkOpacityValue.textContent = '50%';
         }
         
         // 重置时间模式为"全程显示"
@@ -2816,14 +2882,44 @@ class MediaProcessorApp {
         
         // 等待图片加载完成后再设置初始位置
         this.logoPreviewImg.onload = () => {
+            // 保存图片的原始宽高比
+            if (this.logoPreviewImg.naturalWidth && this.logoPreviewImg.naturalHeight) {
+                this.logoAspectRatio = this.logoPreviewImg.naturalWidth / this.logoPreviewImg.naturalHeight;
+            }
             this.setOverlayInitialPosition('logo');
             this.updateInputsFromOverlay('logo');
+            
+            // 强制设置默认值 - 确保宽度为345px
+            if (this.logoWidthInput) this.logoWidthInput.value = 345;
+            if (this.logoHeightInput && this.logoAspectRatio) {
+                this.logoHeightInput.value = Math.round(345 / this.logoAspectRatio);
+            }
+            if (this.logoXInput) this.logoXInput.value = 50;
+            if (this.logoYInput) this.logoYInput.value = 50;
+            
+            // 触发双向绑定，同步更新图片显示大小
+            this.updateOverlayFromInputs('logo', true);
         };
         
         // 如果图片已经加载过（缓存），立即设置位置
         if (this.logoPreviewImg.complete) {
+            // 保存图片的原始宽高比
+            if (this.logoPreviewImg.naturalWidth && this.logoPreviewImg.naturalHeight) {
+                this.logoAspectRatio = this.logoPreviewImg.naturalWidth / this.logoPreviewImg.naturalHeight;
+            }
             this.setOverlayInitialPosition('logo');
             this.updateInputsFromOverlay('logo');
+            
+            // 强制设置默认值 - 确保宽度为345px
+            if (this.logoWidthInput) this.logoWidthInput.value = 345;
+            if (this.logoHeightInput && this.logoAspectRatio) {
+                this.logoHeightInput.value = Math.round(345 / this.logoAspectRatio);
+            }
+            if (this.logoXInput) this.logoXInput.value = 50;
+            if (this.logoYInput) this.logoYInput.value = 50;
+            
+            // 触发双向绑定，同步更新图片显示大小
+            this.updateOverlayFromInputs('logo', true);
         }
         
         // 更新视频显示区域指示器样式
@@ -2841,14 +2937,44 @@ class MediaProcessorApp {
         
         // 等待图片加载完成后再设置初始位置
         this.watermarkPreviewImg.onload = () => {
+            // 保存图片的原始宽高比
+            if (this.watermarkPreviewImg.naturalWidth && this.watermarkPreviewImg.naturalHeight) {
+                this.watermarkAspectRatio = this.watermarkPreviewImg.naturalWidth / this.watermarkPreviewImg.naturalHeight;
+            }
             this.setOverlayInitialPosition('watermark');
             this.updateInputsFromOverlay('watermark');
+            
+            // 强制设置默认值 - 确保宽度为345px
+            if (this.watermarkWidthInput) this.watermarkWidthInput.value = 345;
+            if (this.watermarkHeightInput && this.watermarkAspectRatio) {
+                this.watermarkHeightInput.value = Math.round(345 / this.watermarkAspectRatio);
+            }
+            if (this.watermarkXInput) this.watermarkXInput.value = 50;
+            if (this.watermarkYInput) this.watermarkYInput.value = 50;
+            
+            // 触发双向绑定，同步更新图片显示大小
+            this.updateOverlayFromInputs('watermark', true);
         };
         
         // 如果图片已经加载过（缓存），立即设置位置
         if (this.watermarkPreviewImg.complete) {
+            // 保存图片的原始宽高比
+            if (this.watermarkPreviewImg.naturalWidth && this.watermarkPreviewImg.naturalHeight) {
+                this.watermarkAspectRatio = this.watermarkPreviewImg.naturalWidth / this.watermarkPreviewImg.naturalHeight;
+            }
             this.setOverlayInitialPosition('watermark');
             this.updateInputsFromOverlay('watermark');
+            
+            // 强制设置默认值 - 确保宽度为345px
+            if (this.watermarkWidthInput) this.watermarkWidthInput.value = 345;
+            if (this.watermarkHeightInput && this.watermarkAspectRatio) {
+                this.watermarkHeightInput.value = Math.round(345 / this.watermarkAspectRatio);
+            }
+            if (this.watermarkXInput) this.watermarkXInput.value = 50;
+            if (this.watermarkYInput) this.watermarkYInput.value = 50;
+            
+            // 触发双向绑定，同步更新图片显示大小
+            this.updateOverlayFromInputs('watermark', true);
         }
         
         // 更新视频显示区域指示器样式
@@ -2866,66 +2992,54 @@ class MediaProcessorApp {
         const imgElement = element.querySelector('img');
         if (!imgElement || !imgElement.src) return;
         
-        // 计算合适的初始大小，保持图片原始宽高比
-        const initialSize = Math.min(this.videoDisplaySize.width, this.videoDisplaySize.height) * 0.15; // 15%的视频尺寸
-        const minSize = 40; // 最小尺寸
-        let width = Math.max(minSize, initialSize);
-        let height = Math.max(minSize, initialSize);
+        // 使用默认大小设置
+        let width = 345; // 默认宽度
+        let height = 345; // 临时高度，会根据图片宽高比重新计算
         
-        // 如果图片已加载，根据真实宽高比计算尺寸
+        // 如果图片已加载，根据真实宽高比重新计算高度
         if (imgElement.naturalWidth && imgElement.naturalHeight) {
             const aspectRatio = imgElement.naturalWidth / imgElement.naturalHeight;
             
-            // 计算适合的显示尺寸，保持宽高比
-            if (aspectRatio > 1) {
-                // 宽图，以宽度为基准
-                width = Math.max(minSize, initialSize);
-                height = width / aspectRatio;
-            } else {
-                // 高图，以高度为基准
-                height = Math.max(minSize, initialSize);
-                width = height * aspectRatio;
-            }
+            // 以默认宽度为基准，计算相应的高度保持宽高比
+            height = Math.round(width / aspectRatio);
             
-            // 确保不超过视频显示区域的30%
-            const maxWidth = this.videoDisplaySize.width * 0.3;
-            const maxHeight = this.videoDisplaySize.height * 0.3;
+            // 只有当尺寸真正超过视频显示区域时才缩小（允许更大的初始尺寸）
+            const maxWidth = this.videoDisplaySize.width - 20; // 留20px边距
+            const maxHeight = this.videoDisplaySize.height - 20; // 留20px边距
             
-            if (width > maxWidth) {
-                width = maxWidth;
-                height = width / aspectRatio;
-            }
-            if (height > maxHeight) {
-                height = maxHeight;
-                width = height * aspectRatio;
+            if (width > maxWidth || height > maxHeight) {
+                // 如果超过视频区域，按比例缩小
+                const scaleX = maxWidth / width;
+                const scaleY = maxHeight / height;
+                const scale = Math.min(scaleX, scaleY);
+                
+                width = Math.round(width * scale);
+                height = Math.round(height * scale);
             }
         }
         
-        // 计算初始位置
+        // 计算初始位置 - 统一使用(50, 50)作为默认坐标
         let x, y;
-        if (type === 'logo') {
-            // LOGO默认放在左上角（真正的边界，无边距）
-            x = this.videoDisplayOffset.x;
-            y = this.videoDisplayOffset.y;
-        } else {
-            // 水印默认放在固定位置 (50, 200)，与处理逻辑保持一致
-            // 将视频坐标转换为播放器坐标
             if (this.videoRealSize.width > 0 && this.videoRealSize.height > 0) {
-                const defaultPlayerCoords = this.videoCoordsToPlayerCoords(50, 200, width, height);
+            // 将视频坐标(50, 50)转换为播放器坐标
+            const defaultPlayerCoords = this.videoCoordsToPlayerCoords(50, 50, width, height);
                 x = defaultPlayerCoords.x;
                 y = defaultPlayerCoords.y;
             } else {
                 // 如果视频尺寸还没准备好，使用相对位置作为后备方案
                 x = this.videoDisplayOffset.x + 50;
-                y = this.videoDisplayOffset.y + 200;
-            }
+            y = this.videoDisplayOffset.y + 50;
         }
         
-        // 确保在视频显示区域内
-        x = Math.max(this.videoDisplayOffset.x, Math.min(x, this.videoDisplayOffset.x + this.videoDisplaySize.width - width));
-        y = Math.max(this.videoDisplayOffset.y, Math.min(y, this.videoDisplayOffset.y + this.videoDisplaySize.height - height));
+        // 调整位置确保在视频显示区域内（但不强制缩小尺寸）
+        const maxX = this.videoDisplayOffset.x + this.videoDisplaySize.width - width;
+        const maxY = this.videoDisplayOffset.y + this.videoDisplaySize.height - height;
         
-        // 设置位置和大小
+        // 如果元素太大无法完全显示在视频区域内，调整位置而不是缩小尺寸
+        x = Math.max(this.videoDisplayOffset.x, Math.min(x, maxX));
+        y = Math.max(this.videoDisplayOffset.y, Math.min(y, maxY));
+        
+        // 设置位置和大小 - 保持原始尺寸不变
         element.style.left = x + 'px';
         element.style.top = y + 'px';
         element.style.width = width + 'px';
@@ -2958,15 +3072,109 @@ class MediaProcessorApp {
         element.style.height = height + 'px';
     }
 
+    // 验证输入框数值
+    validateInputValue(value, min = 0, max = 9999) {
+        const numValue = parseInt(value);
+        if (isNaN(numValue)) return min;
+        return Math.max(min, Math.min(numValue, max));
+    }
+
+    // 为输入框添加实时验证提示
+    addInputValidationFeedback(inputElement, isValid, message = '', isRealTime = false) {
+        if (!inputElement) return;
+        
+        // 移除现有的验证样式
+        inputElement.classList.remove('input-valid', 'input-invalid', 'input-warning');
+        
+        // 添加新的验证样式
+        if (isValid) {
+            inputElement.classList.add('input-valid');
+        } else {
+            // 实时验证时使用警告样式，失去焦点时使用错误样式
+            if (isRealTime) {
+                inputElement.classList.add('input-warning');
+            } else {
+                inputElement.classList.add('input-invalid');
+            }
+        }
+        
+        // 设置工具提示
+        if (message) {
+            inputElement.title = message;
+        } else {
+            inputElement.removeAttribute('title');
+        }
+    }
+
     // 从输入框更新覆盖层位置（输入框中的值是基于视频真实分辨率的）
-    updateOverlayFromInputs(type) {
+    updateOverlayFromInputs(type, validateAndCorrect = false, changedInput = null) {
         const prefix = type === 'logo' ? 'logo' : 'watermark';
         
-        // 确保获取正确的数值，特别处理0值
-        const videoX = this[`${prefix}XInput`]?.value === '' ? 0 : (parseInt(this[`${prefix}XInput`]?.value) || 0);
-        const videoY = this[`${prefix}YInput`]?.value === '' ? 0 : (parseInt(this[`${prefix}YInput`]?.value) || 0);
-        const videoWidth = parseInt(this[`${prefix}WidthInput`]?.value) || 100;
-        const videoHeight = parseInt(this[`${prefix}HeightInput`]?.value) || 100;
+        // 获取输入框元素
+        const xInput = this[`${prefix}XInput`];
+        const yInput = this[`${prefix}YInput`];
+        const widthInput = this[`${prefix}WidthInput`];
+        const heightInput = this[`${prefix}HeightInput`];
+        const aspectRatioLock = this[`${prefix}AspectRatioLock`];
+        
+        // 获取原始输入值
+        let videoX = parseInt(xInput?.value) || 0;
+        let videoY = parseInt(yInput?.value) || 0;
+        let videoWidth = parseInt(widthInput?.value) || 100;
+        let videoHeight = parseInt(heightInput?.value) || 100;
+        
+        // 宽高比保持逻辑
+        const aspectRatio = type === 'logo' ? this.logoAspectRatio : this.watermarkAspectRatio;
+        const isAspectRatioLocked = aspectRatioLock?.checked && aspectRatio;
+        
+        if (isAspectRatioLocked && changedInput && validateAndCorrect) {
+            if (changedInput === widthInput) {
+                // 宽度改变，计算对应高度
+                videoHeight = Math.round(videoWidth / aspectRatio);
+                if (heightInput) heightInput.value = videoHeight;
+            } else if (changedInput === heightInput) {
+                // 高度改变，计算对应宽度
+                videoWidth = Math.round(videoHeight * aspectRatio);
+                if (widthInput) widthInput.value = videoWidth;
+            }
+        }
+        
+        // 如果当前有视频加载，检查边界
+        let maxX = 9999, maxY = 9999;
+        if (this.currentVideoInfo) {
+            maxX = Math.max(0, this.currentVideoInfo.width - videoWidth);
+            maxY = Math.max(0, this.currentVideoInfo.height - videoHeight);
+        }
+        
+        // 只在明确要求验证时才进行数值校正
+        if (validateAndCorrect) {
+            // 验证并校正数值
+            videoX = this.validateInputValue(videoX, 0, maxX);
+            videoY = this.validateInputValue(videoY, 0, maxY);
+            videoWidth = this.validateInputValue(videoWidth, 10, 9999);
+            videoHeight = this.validateInputValue(videoHeight, 10, 9999);
+            
+            // 更新输入框的值（如果被校正了）
+            if (xInput && parseInt(xInput.value) !== videoX) xInput.value = videoX;
+            if (yInput && parseInt(yInput.value) !== videoY) yInput.value = videoY;
+            if (widthInput && parseInt(widthInput.value) !== videoWidth) widthInput.value = videoWidth;
+            if (heightInput && parseInt(heightInput.value) !== videoHeight) heightInput.value = videoHeight;
+        }
+        
+        // 为输入框添加视觉反馈（不修改值）
+        const isRealTime = !validateAndCorrect;
+        this.addInputValidationFeedback(xInput, videoX >= 0 && videoX <= maxX, 
+            videoX > maxX ? `X坐标不能超过 ${maxX}` : '', isRealTime);
+        this.addInputValidationFeedback(yInput, videoY >= 0 && videoY <= maxY, 
+            videoY > maxY ? `Y坐标不能超过 ${maxY}` : '', isRealTime);
+        this.addInputValidationFeedback(widthInput, videoWidth >= 10, 
+            videoWidth < 10 ? '宽度不能小于 10px' : '', isRealTime);
+        this.addInputValidationFeedback(heightInput, videoHeight >= 10, 
+            videoHeight < 10 ? '高度不能小于 10px' : '', isRealTime);
+        
+        // 只有当数值有效时才更新预览
+        if (videoX >= 0 && videoX <= maxX && videoY >= 0 && videoY <= maxY && 
+            videoWidth >= 10 && videoHeight >= 10) {
         
         // 将视频坐标转换为播放器坐标
         const playerCoords = this.videoCoordsToPlayerCoords(videoX, videoY, videoWidth, videoHeight);
@@ -2974,17 +3182,18 @@ class MediaProcessorApp {
         // 限制在视频显示区域内，确保可以精确到达边界
         const minX = this.videoDisplayOffset.x;
         const minY = this.videoDisplayOffset.y;
-        const maxX = this.videoDisplayOffset.x + this.videoDisplaySize.width - playerCoords.width;
-        const maxY = this.videoDisplayOffset.y + this.videoDisplaySize.height - playerCoords.height;
+            const maxPlayerX = this.videoDisplayOffset.x + this.videoDisplaySize.width - playerCoords.width;
+            const maxPlayerY = this.videoDisplayOffset.y + this.videoDisplaySize.height - playerCoords.height;
         
-        let constrainedX = Math.max(minX, Math.min(playerCoords.x, maxX));
-        let constrainedY = Math.max(minY, Math.min(playerCoords.y, maxY));
+            let constrainedX = Math.max(minX, Math.min(playerCoords.x, maxPlayerX));
+            let constrainedY = Math.max(minY, Math.min(playerCoords.y, maxPlayerY));
         
         // 确保0坐标能够精确映射到边界
         if (videoX === 0) constrainedX = minX;
         if (videoY === 0) constrainedY = minY;
         
         this.setOverlayPosition(type, constrainedX, constrainedY, playerCoords.width, playerCoords.height);
+        }
     }
 
     // 从覆盖层更新输入框（输入框显示基于视频真实分辨率的坐标）
@@ -2994,7 +3203,34 @@ class MediaProcessorApp {
         
         if (!element) return;
         
-        // 获取播放器坐标
+        // 检查是否是首次设置（输入框为空或为默认值）
+        const xInput = this[`${prefix}XInput`];
+        const yInput = this[`${prefix}YInput`];
+        const widthInput = this[`${prefix}WidthInput`];
+        const heightInput = this[`${prefix}HeightInput`];
+        
+        const isFirstTimeSetup = !xInput?.value || !yInput?.value || 
+                                !widthInput?.value || !heightInput?.value ||
+                                (widthInput?.value && parseInt(widthInput.value) < 200); // 如果宽度小于200，认为需要重置
+        
+        if (isFirstTimeSetup) {
+            // 首次设置：强制使用345px宽度的默认值
+            if (xInput) xInput.value = 50;
+            if (yInput) yInput.value = 50;
+            if (widthInput) widthInput.value = 345; // 强制设置为345px
+            
+            // 高度根据图片宽高比计算
+            const imgElement = element.querySelector('img');
+            let defaultHeight = 230; // 后备默认值
+            if (imgElement && imgElement.naturalWidth && imgElement.naturalHeight) {
+                const aspectRatio = imgElement.naturalWidth / imgElement.naturalHeight;
+                defaultHeight = Math.round(345 / aspectRatio);
+            }
+            if (heightInput) heightInput.value = defaultHeight;
+            
+            // 注意：不要在这里调用updateOverlayFromInputs，避免递归
+        } else {
+            // 后续更新：从覆盖层读取实际坐标
         const playerX = parseInt(element.style.left) || 0;
         const playerY = parseInt(element.style.top) || 0;
         const playerWidth = parseInt(element.style.width) || 100;
@@ -3004,10 +3240,11 @@ class MediaProcessorApp {
         const videoCoords = this.playerCoordsToVideoCoords(playerX, playerY, playerWidth, playerHeight);
         
         // 更新输入框（显示视频真实坐标）
-        if (this[`${prefix}XInput`]) this[`${prefix}XInput`].value = videoCoords.x;
-        if (this[`${prefix}YInput`]) this[`${prefix}YInput`].value = videoCoords.y;
-        if (this[`${prefix}WidthInput`]) this[`${prefix}WidthInput`].value = videoCoords.width;
-        if (this[`${prefix}HeightInput`]) this[`${prefix}HeightInput`].value = videoCoords.height;
+            if (xInput) xInput.value = videoCoords.x;
+            if (yInput) yInput.value = videoCoords.y;
+            if (widthInput) widthInput.value = videoCoords.width;
+            if (heightInput) heightInput.value = videoCoords.height;
+        }
     }
 
     // ================================
