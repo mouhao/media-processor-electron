@@ -9,7 +9,8 @@ const { ffmpegPath, ffprobePath } = require('./common-processor');
  */
 async function runFfprobe(args) {
     return new Promise((resolve, reject) => {
-        const ffprobe = spawn(ffprobePath, args);
+        const ffprobeExePath = ffprobePath();
+        const ffprobe = spawn(ffprobeExePath, args);
         let output = '';
         let errorOutput = '';
 
@@ -102,11 +103,12 @@ function formatTime(seconds) {
  */
 function executeFFmpeg(args, logCallback, progressCallback = null, totalDuration = null) {
     return new Promise((resolve, reject) => {
-        if (!ffmpegPath) {
+        const ffmpegExePath = ffmpegPath();
+        if (!ffmpegExePath) {
             return reject(new Error('FFmpeg not found'));
         }
 
-        const ffmpeg = spawn(ffmpegPath, args);
+        const ffmpeg = spawn(ffmpegExePath, args);
         let stderr = '';
         let lastProgressTime = 0;
         
@@ -458,8 +460,11 @@ async function processVideo(inputPath, outputBasePath, options, logCallback, pro
         logCallback('info', '📺 HLS兼容性：independent_segments + mpegts格式，支持更多播放器');
     }
 
+        // 获取FFmpeg路径
+        const ffmpegExePath = ffmpegPath();
+        
         // 构建完整的命令字符串用于日志
-        const command = `${ffmpegPath} ${args.join(' ')}`;
+        const command = `${ffmpegExePath} ${args.join(' ')}`;
         
         // 打印命令到日志
         if (logCallback) {

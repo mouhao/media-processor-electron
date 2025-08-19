@@ -68,7 +68,8 @@ function runFfprobe(args) {
             return reject(new Error('ffprobe not found for this platform.'));
         }
 
-        const ffprobe = spawn(ffprobePath, args);
+        const ffprobeExePath = ffprobePath();
+        const ffprobe = spawn(ffprobeExePath, args);
         let output = '';
         let errorOutput = '';
 
@@ -1187,12 +1188,13 @@ function getPipPosition(mainWidth, mainHeight, pipDimensions, position) {
 
 function executeFFmpeg(args, logCallback, progressCallback = null, totalDuration = null) {
     return new Promise((resolve, reject) => {
-        if (!ffmpegPath) {
+        const ffmpegExePath = ffmpegPath();
+        if (!ffmpegExePath) {
             return reject(new Error('FFmpeg not found. Please check your installation and configuration.'));
         }
         
         // 构建完整的命令字符串用于日志
-        const command = `${ffmpegPath} ${args.join(' ')}`;
+        const command = `${ffmpegExePath} ${args.join(' ')}`;
         
         if (logCallback) {
             logCallback('command', `🔧 执行命令: ${command}`);
@@ -1201,7 +1203,7 @@ function executeFFmpeg(args, logCallback, progressCallback = null, totalDuration
             }
         }
         
-        const ffmpeg = spawn(ffmpegPath, args);
+        const ffmpeg = spawn(ffmpegExePath, args);
         
         let stderr = '';
         let lastProgressTime = 0;

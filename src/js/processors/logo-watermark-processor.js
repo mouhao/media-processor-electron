@@ -10,7 +10,8 @@ const { ffmpegPath, ffprobePath, generateUniqueFilename, getHardwareAccelArgs, g
  */
 async function runFfprobe(args) {
     return new Promise((resolve, reject) => {
-        const ffprobe = spawn(ffprobePath, args);
+        const ffprobeExePath = ffprobePath();
+        const ffprobe = spawn(ffprobeExePath, args);
         let output = '';
         let errorOutput = '';
 
@@ -202,11 +203,12 @@ function formatTime(seconds) {
  */
 function executeFFmpeg(args, logCallback, progressCallback = null, totalDuration = null) {
     return new Promise((resolve, reject) => {
-        if (!ffmpegPath) {
+        const ffmpegExePath = ffmpegPath();
+        if (!ffmpegExePath) {
             return reject(new Error('FFmpeg not found'));
         }
 
-        const ffmpeg = spawn(ffmpegPath, args);
+        const ffmpeg = spawn(ffmpegExePath, args);
         let stderr = '';
         let lastProgressTime = 0;
         
@@ -349,7 +351,8 @@ async function processVideoLogoWatermark(inputPath, outputPath, options, logCall
         args.push('-y', outputPath); // -y 覆盖输出文件
         
         if (logCallback) {
-            const command = `${ffmpegPath} ${args.join(' ')}`;
+            const ffmpegExePath = ffmpegPath();
+            const command = `${ffmpegExePath} ${args.join(' ')}`;
             logCallback('command', `🔧 执行命令: ${command}`);
         }
         

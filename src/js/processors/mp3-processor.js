@@ -92,15 +92,18 @@ function compressMp3(inputPath, outputPath, bitrate, encodingMode, logCallback) 
         
         args.push('-y', outputPath); // Overwrite output file
 
+        // 获取FFmpeg路径
+        const ffmpegExePath = ffmpegPath();
+        
         // 构建完整的命令字符串用于日志
-        const command = `${ffmpegPath} ${args.join(' ')}`;
+        const command = `${ffmpegExePath} ${args.join(' ')}`;
         
         // 打印命令到日志
         if (logCallback) {
             logCallback('command', `🔧 执行命令: ${command}`);
         }
 
-        const ffmpeg = spawn(ffmpegPath, args);
+        const ffmpeg = spawn(ffmpegExePath, args);
 
         let stderr = '';
         ffmpeg.stderr.on('data', (data) => {

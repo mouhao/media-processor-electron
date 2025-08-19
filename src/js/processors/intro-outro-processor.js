@@ -865,7 +865,8 @@ async function concatVideosIntroOutro(mainVideo, introFile, outroFile, outputPat
  */
 async function runFfprobe(args) {
     return new Promise((resolve, reject) => {
-        const ffprobe = spawn(ffprobePath, args);
+        const ffprobeExePath = ffprobePath();
+        const ffprobe = spawn(ffprobeExePath, args);
         
         let stdout = '';
         let stderr = '';
@@ -901,7 +902,8 @@ async function runFfprobe(args) {
  */
 async function getVideoInfo(videoPath) {
     return new Promise((resolve, reject) => {
-        const ffprobe = spawn(ffprobePath, [
+        const ffprobeExePath = ffprobePath();
+        const ffprobe = spawn(ffprobeExePath, [
             '-v', 'quiet',
             '-print_format', 'json',
             '-show_format',
@@ -1327,13 +1329,14 @@ async function analyzeVideoForQualityMatch(videoPath, logCallback) {
  * 执行FFmpeg命令（支持精确进度显示）
  */
 function executeFFmpeg(args, logCallback, progressCallback = null, totalDuration = null) {
-    return new Promise((resolve, reject) => {
-        if (!ffmpegPath) {
+        return new Promise((resolve, reject) => {
+        const ffmpegExePath = ffmpegPath();
+        if (!ffmpegExePath) {
             return reject(new Error('FFmpeg not found. Please check your installation and configuration.'));
         }
 
         // 构建完整的命令字符串用于日志
-        const command = `${ffmpegPath} ${args.join(' ')}`;
+        const command = `${ffmpegExePath} ${args.join(' ')}`;
         
         if (logCallback) {
             logCallback('command', `🔧 执行命令: ${command}`);
@@ -1341,8 +1344,8 @@ function executeFFmpeg(args, logCallback, progressCallback = null, totalDuration
                 logCallback('info', `📊 预期处理时长: ${formatTime(totalDuration)} (${totalDuration.toFixed(2)}秒)`);
             }
         }
-
-        const ffmpeg = spawn(ffmpegPath, args);
+        
+        const ffmpeg = spawn(ffmpegExePath, args);
         
         let stderr = '';
         let lastProgressTime = 0;

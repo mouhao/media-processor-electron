@@ -9,7 +9,12 @@ function getFfmpegPaths() {
     const isMac = process.platform === 'darwin';
     const isWin = process.platform === 'win32';
 
-
+    // 调试信息
+    console.log('FFmpeg路径调试:', { 
+        isPackaged, 
+        platform: process.platform,
+        resourcesPath: isPackaged ? process.resourcesPath : '(开发模式)'
+    });
 
     let ffmpegPath, ffprobePath;
 
@@ -35,10 +40,26 @@ function getFfmpegPaths() {
         }
     }
     
+    // 调试输出最终路径
+    console.log('计算出的FFmpeg路径:', { ffmpegPath, ffprobePath });
+    
     if (!ffmpegPath || !ffprobePath) {
         // 如果平台不支持或路径未定义，则返回null
+        console.error('FFmpeg路径未找到或平台不支持');
         return { ffmpegPath: null, ffprobePath: null };
     }
+
+    // 检查文件是否存在
+    const fs = require('fs');
+    const ffmpegExists = fs.existsSync(ffmpegPath);
+    const ffprobeExists = fs.existsSync(ffprobePath);
+    
+    console.log('FFmpeg文件存在性检查:', { 
+        ffmpegExists, 
+        ffprobeExists,
+        ffmpegPath: ffmpegExists ? '✅' : '❌',
+        ffprobePath: ffprobeExists ? '✅' : '❌'
+    });
 
     return { ffmpegPath, ffprobePath };
 }
@@ -396,7 +417,28 @@ function formatDuration(seconds) {
     }
 }
 
-const { ffmpegPath, ffprobePath } = getFfmpegPaths();
+// 延迟获取FFmpeg路径的函数，确保在需要时才获取
+function getLazyFFmpegPaths() {
+    return getFfmpegPaths();
+}
+
+// 获取ffmpegPath（延迟加载）
+function getFFmpegPath() {
+    const { ffmpegPath } = getLazyFFmpegPaths();
+    if (!ffmpegPath) {
+        throw new Error('FFmpeg路径未找到，请检查安装配置');
+    }
+    return ffmpegPath;
+}
+
+// 获取ffprobePath（延迟加载）
+function getFFprobePath() {
+    const { ffprobePath } = getLazyFFmpegPaths();
+    if (!ffprobePath) {
+        throw new Error('FFprobe路径未找到，请检查安装配置');
+    }
+    return ffprobePath;
+}
 
 /**
  * 生成不重复的输出文件名，如果目标文件已存在，自动添加后缀
@@ -536,6 +578,7 @@ module.exports = {
     getFilterCompatibleHwAccelArgs,
     getBestHardwareEncoder,
     getAccelerationType,
-    ffmpegPath,
-    ffprobePath,
+    ffmpegPath: getFFmpegPath,
+    ffprobePath: getFFprobePath,
+    getFfmpegPaths,
 }; 
