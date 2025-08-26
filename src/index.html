@@ -652,6 +652,41 @@
                 <div id="logo-watermark-settings" class="tab-content">
                     <h4>LOGO水印设置</h4>
                     
+                    <!-- 批量处理控制面板 -->
+                    <div class="setting-group">
+                        <h5>📦 批量处理控制</h5>
+                        <div class="batch-info-panel">
+                            <div class="batch-stat">
+                                <span class="stat-label">已选择视频:</span>
+                                <span id="batch-video-count" class="stat-value">0</span>
+                                <span class="stat-unit">个文件</span>
+                            </div>
+                            <div class="batch-actions">
+                                <button id="batch-select-all" class="btn btn-secondary">全选视频</button>
+                                <button id="batch-clear-selection" class="btn btn-outline">清空选择</button>
+                            </div>
+                        </div>
+                        <div class="batch-preview">
+                            <label>
+                                <input type="checkbox" id="batch-preview-enabled">
+                                启用预览模式 (仅处理前3个文件用于预览效果)
+                            </label>
+                        </div>
+                        
+                        <!-- 使用提示 -->
+                        <div class="batch-tips">
+                            <div class="tip-item">
+                                <span class="tip-icon">💡</span>
+                                <span class="tip-text">使用 <strong>📄 选择文件</strong> 按钮可以一次选择多个视频文件</span>
+                            </div>
+                            <div class="tip-item">
+                                <span class="tip-icon">⌨️</span>
+                                <span class="tip-text">选择时按住 <kbd>Ctrl</kbd> (Windows) 或 <kbd>Cmd</kbd> (Mac) 可多选文件</span>
+                            </div>
+                        </div>
+
+                    </div>
+                    
                     <!-- LOGO设置 -->
                     <div class="setting-group">
                         <h5>🎨 LOGO设置</h5>
@@ -668,7 +703,11 @@
                             <div class="file-input-group">
                                 <input type="text" id="logo-file" placeholder="选择LOGO图片" readonly>
                                 <button id="select-logo-btn" class="btn btn-secondary">选择图片</button>
+                                <button id="use-default-logo-btn" class="btn btn-primary">使用默认LOGO</button>
                                 <button id="clear-logo-btn" class="btn btn-danger" style="display: none;">清除</button>
+                            </div>
+                            <div class="default-logo-preview" id="default-logo-preview" style="display: none;">
+                                <small class="text-muted">🎯 正在使用默认LOGO</small>
                             </div>
                         </div>
                         

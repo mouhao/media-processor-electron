@@ -366,6 +366,24 @@ ipcMain.handle('select-logo-file', async () => {
   }
 });
 
+// 获取默认LOGO文件路径
+ipcMain.handle('get-default-logo-path', async () => {
+  try {
+    const defaultLogoPath = app.isPackaged 
+      ? path.join(process.resourcesPath, 'src', 'assets', 'xdt_logo.png')
+      : path.join(__dirname, 'src', 'assets', 'xdt_logo.png');
+    
+    // 检查文件是否存在
+    const fs = require('fs').promises;
+    await fs.access(defaultLogoPath);
+    
+    return { success: true, filePath: defaultLogoPath };
+  } catch (error) {
+    console.error('获取默认LOGO文件时出错:', error);
+    return { success: false, error: '默认LOGO文件不存在，请确保 xdt_logo.png 在 src/assets/ 目录下' };
+  }
+});
+
 // 水印文件选择
 ipcMain.handle('select-watermark-file', async () => {
   try {

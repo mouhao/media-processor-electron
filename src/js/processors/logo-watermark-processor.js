@@ -426,16 +426,23 @@ async function processLogoWatermark(progressCallback, logCallback, outputPath, f
             const fileExt = path.extname(file.name);
             const baseName = path.basename(file.name, fileExt);
             
-            // 为每个文件创建独立的子文件夹
-            const fileOutputDir = path.join(outputPath, `LOGO水印处理_${baseName}`);
-            await fs.mkdir(fileOutputDir, { recursive: true });
-            
-            // 使用原文件名作为输出文件名
-            const outputFilePath = path.join(fileOutputDir, file.name);
+            // 为批量处理生成唯一文件名
+            let outputFilePath;
+            let uniqueBaseName;
+            if (files.length > 1) {
+                // 批量处理：添加序号和LOGO水印标识
+                const fileIndex = (i + 1).toString().padStart(2, '0');
+                uniqueBaseName = `${baseName}_LOGO水印_${fileIndex}`;
+                outputFilePath = path.join(outputPath, `${uniqueBaseName}${fileExt}`);
+            } else {
+                // 单文件处理：简单添加LOGO水印标识
+                uniqueBaseName = `${baseName}_LOGO水印`;
+                outputFilePath = path.join(outputPath, `${uniqueBaseName}${fileExt}`);
+            }
             
             if (logCallback) {
-                logCallback('info', `🎥 处理文件: ${file.name}`);
-                logCallback('info', `📁 输出目录: ${path.basename(fileOutputDir)}`);
+                logCallback('info', `🎥 处理文件 ${i + 1}/${files.length}: ${file.name}`);
+                logCallback('info', `📁 输出文件: ${uniqueBaseName}${fileExt}`);
             }
             
             // 处理单个视频，传递进度回调
