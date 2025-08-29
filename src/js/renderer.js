@@ -641,9 +641,9 @@ class MediaProcessorApp {
                 const firstFilePath = files[0];
                 this.currentFolder = path.dirname(firstFilePath);
                 
-                // 对于LOGO水印模式，每次选择新文件时都更新输出路径
+                // 对于LOGO水印模式和视频转m3u8模式，每次选择新文件时都更新输出路径
                 // 对于其他模式，只在没有设置输出路径时设置默认路径
-                if (this.currentFileType === 'logo-watermark' || !this.outputFolder.value) {
+                if (this.currentFileType === 'logo-watermark' || this.currentFileType === 'video' || !this.outputFolder.value) {
                     const defaultOutputPath = await ipcRenderer.invoke('get-default-output-path', this.currentFolder);
                     if (defaultOutputPath.success) {
                         this.outputFolder.value = defaultOutputPath.path;

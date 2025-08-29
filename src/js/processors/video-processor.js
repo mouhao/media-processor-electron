@@ -182,7 +182,7 @@ function executeFFmpeg(args, logCallback, progressCallback = null, totalDuration
 }
 
 async function processVideoFiles(progressCallback, logCallback, folderPath, outputPath, files, options, shouldStopCallback = null) {
-    const outputDir = path.join(outputPath, 'video_output');
+    const outputDir = outputPath; // 直接使用输出路径，不添加video_output子文件夹
     await fs.mkdir(outputDir, { recursive: true });
 
     let processedCount = 0;
