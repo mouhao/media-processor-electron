@@ -1570,6 +1570,9 @@ class MediaProcessorApp {
             resolution: resolution,
             quality: quality,
             segmentDuration: parseInt(document.getElementById('segment-duration').value),
+            fastStartHLS: document.getElementById('fast-start-hls').checked,
+            qualityStability: document.getElementById('quality-stability').checked,
+            complexSceneMode: document.getElementById('complex-scene-mode').checked,
             rename: document.getElementById('video-rename').checked,
             // 新增高级优化选项
             scalingStrategy: document.getElementById('video-scaling-strategy').value,
