@@ -312,10 +312,33 @@ async function processVideo(inputPath, outputBasePath, options, logCallback, pro
     }
 
     // 构建FFmpeg参数
-    const args = ['-i', inputPath];
+    const args = [];
 
-    // 视频编码设置
-    args.push('-c:v', 'libx264');
+    // === Mac硬件加速优化 ===
+    if (process.platform === 'darwin') {
+        // macOS: 启用VideoToolbox硬件解码加速（必须在-i之前）
+        args.push('-hwaccel', 'videotoolbox');
+        if (logCallback) {
+            logCallback('info', '🍎 启用VideoToolbox硬件解码加速');
+        }
+    }
+    
+    // 添加输入文件参数
+    args.push('-i', inputPath);
+
+    // === 视频编码设置（Mac硬件编码优化）===
+    let videoEncoder = 'libx264';
+    let useMacHardwareAccel = false;
+    
+    if (process.platform === 'darwin') {
+        // macOS: 优先使用硬件编码器
+        videoEncoder = 'h264_videotoolbox';
+        useMacHardwareAccel = true;
+        if (logCallback) {
+            logCallback('info', '🚀 使用VideoToolbox硬件编码器，显著提升处理速度');
+        }
+    }
+    args.push('-c:v', videoEncoder);
 
     // 处理质量设置
     if (quality === 'custom') {
@@ -333,24 +356,50 @@ async function processVideo(inputPath, outputBasePath, options, logCallback, pro
             args.push('-preset', customPreset);
         }
     } else {
-        // 预设质量设置（默认使用baseline profile以获得最佳兼容性）
-        const qualitySettings = {
-            'high': { crf: 18, preset: 'slow', profile: 'baseline' },
-            'medium': { crf: 23, preset: 'medium', profile: 'baseline' },
-            'fast': { crf: 28, preset: 'fast', profile: 'baseline' }
-        };
-        
-        const qualitySetting = qualitySettings[quality] || qualitySettings['medium'];
-        
-        // 添加编码规范兼容性
-        if (qualitySetting.profile) {
-            args.push('-profile:v', qualitySetting.profile);
-        }
-        if (qualitySetting.crf) {
-            args.push('-crf', qualitySetting.crf.toString());
-        }
-        if (qualitySetting.preset) {
-            args.push('-preset', qualitySetting.preset);
+        // === Mac硬件编码器优化的质量设置 ===
+        if (useMacHardwareAccel) {
+            // VideoToolbox硬件编码器使用不同的参数体系
+            const vtQualitySettings = {
+                'high': { bitrate: '5000k', profile: 'main' },
+                'medium': { bitrate: '3000k', profile: 'main' },
+                'fast': { bitrate: '2000k', profile: 'baseline' }
+            };
+            
+            const vtSetting = vtQualitySettings[quality] || vtQualitySettings['medium'];
+            args.push('-profile:v', vtSetting.profile);
+            args.push('-b:v', vtSetting.bitrate);
+            
+            // VideoToolbox专用参数：更快的编码速度
+            args.push('-allow_sw', '1'); // 允许软件回退
+            args.push('-realtime', '1'); // 实时编码模式，提升速度
+            
+            if (logCallback) {
+                logCallback('info', `⚡ VideoToolbox质量: ${vtSetting.bitrate}, profile: ${vtSetting.profile}`);
+            }
+        } else {
+            // 软件编码器的传统质量设置
+            const qualitySettings = {
+                'high': { crf: 18, preset: 'faster', profile: 'baseline' }, // 从slow改为faster
+                'medium': { crf: 23, preset: 'faster', profile: 'baseline' }, // 从medium改为faster
+                'fast': { crf: 28, preset: 'veryfast', profile: 'baseline' } // 从fast改为veryfast
+            };
+            
+            const qualitySetting = qualitySettings[quality] || qualitySettings['medium'];
+            
+            // 添加编码规范兼容性
+            if (qualitySetting.profile) {
+                args.push('-profile:v', qualitySetting.profile);
+            }
+            if (qualitySetting.crf) {
+                args.push('-crf', qualitySetting.crf.toString());
+            }
+            if (qualitySetting.preset) {
+                args.push('-preset', qualitySetting.preset);
+            }
+            
+            if (logCallback) {
+                logCallback('info', `🔧 软件编码质量: CRF=${qualitySetting.crf}, preset=${qualitySetting.preset}`);
+            }
         }
     }
 
@@ -376,13 +425,33 @@ async function processVideo(inputPath, outputBasePath, options, logCallback, pro
         }
     }
 
-    // === 新增：默认H.264优化参数（始终应用） ===
-    args.push('-level', '3.1');           // H.264 Level 3.1 (最佳移动端兼容性)
-    args.push('-g', '50');                // GOP大小50 (HLS优化)
-    args.push('-sc_threshold', '0');      // 禁用场景切换检测
+    // === Mac硬件编码器优化的H.264参数 ===
+    if (useMacHardwareAccel) {
+        // VideoToolbox硬件编码器：使用简化参数集
+        args.push('-level', '3.1');       // H.264 Level 3.1 (移动端兼容性)
+        // VideoToolbox自动处理GOP和场景切换，无需手动设置
+        if (logCallback) {
+            logCallback('info', '⚡ VideoToolbox自动优化GOP和场景切换检测');
+        }
+    } else {
+        // 软件编码器：完整H.264优化参数
+        args.push('-level', '3.1');           // H.264 Level 3.1 (最佳移动端兼容性)
+        args.push('-g', '50');                // GOP大小50 (HLS优化)
+        args.push('-sc_threshold', '0');      // 禁用场景切换检测
+        if (logCallback) {
+            logCallback('info', '🔧 软件编码：完整H.264优化参数');
+        }
+    }
 
-    // === 新增：色彩保持增强参数 ===
-    if (colorEnhancement) {
+    // === Mac硬件编码器优化的色彩参数 ===
+    if (useMacHardwareAccel) {
+        // VideoToolbox硬件编码器：使用简化的色彩参数，减少计算负担
+        args.push('-pix_fmt', 'yuv420p');
+        if (logCallback) {
+            logCallback('info', '🍎 VideoToolbox使用优化色彩参数，提升编码速度');
+        }
+    } else if (colorEnhancement) {
+        // 软件编码器：完整的色彩增强参数
         args.push(
             '-colorspace', 'bt709',       // 色彩空间
             '-color_primaries', 'bt709',  // 色彩基准
@@ -391,14 +460,14 @@ async function processVideo(inputPath, outputBasePath, options, logCallback, pro
             '-pix_fmt', 'yuv420p'         // 像素格式
         );
         
-        // x264高级参数：禁用心理视觉优化，保持原始亮度
+        // x264高级参数：禁用心理视觉优化，保持原始亮度（仅软件编码）
         args.push('-x264-params', 'aq-mode=0:aq-strength=1.0:deblock=0,0:psy-rd=0.0,0.0:nr=0');
         
         if (logCallback) {
-            logCallback('info', '🌈 已启用色彩保持增强，防止亮度下降和色彩失真');
+            logCallback('info', '🌈 软件编码：已启用色彩保持增强，防止亮度下降和色彩失真');
         }
     } else {
-        // 即使不启用增强，也确保基础像素格式
+        // 基础像素格式
         args.push('-pix_fmt', 'yuv420p');
     }
 
@@ -471,8 +540,145 @@ async function processVideo(inputPath, outputBasePath, options, logCallback, pro
             logCallback('command', `🔧 执行命令: ${command}`);
         }
 
-    // 使用新的executeFFmpeg函数执行，支持进度显示
-    await executeFFmpeg(args, logCallback, progressCallback, videoInfo.duration);
+    // 使用新的executeFFmpeg函数执行，支持进度显示和Mac硬件编码回退
+    try {
+        await executeFFmpeg(args, logCallback, progressCallback, videoInfo.duration);
+    } catch (error) {
+        // Mac硬件编码失败时，自动回退到软件编码
+        if (useMacHardwareAccel && error.message.includes('h264_videotoolbox')) {
+            if (logCallback) {
+                logCallback('warning', '⚠️ VideoToolbox硬件编码失败，自动回退到软件编码');
+            }
+            
+            // 重新构建使用软件编码的参数
+            const fallbackArgs = await buildSoftwareEncodingArgs(inputPath, outputBasePath, options, logCallback);
+            await executeFFmpeg(fallbackArgs, logCallback, progressCallback, videoInfo.duration);
+        } else {
+            // 其他错误直接抛出
+            throw error;
+        }
+    }
+}
+
+/**
+ * 构建软件编码的回退参数（当Mac硬件编码失败时使用）
+ */
+async function buildSoftwareEncodingArgs(inputPath, outputBasePath, options, logCallback) {
+    const {
+        resolution,
+        quality,
+        segmentDuration,
+        customWidth,
+        customHeight,
+        customProfile,
+        customBitrate,
+        customFramerate,
+        customAudioBitrate,
+        customAudioSamplerate,
+        customPreset,
+        scalingStrategy = 'smart-pad',
+        colorEnhancement = true,
+        bitrateControlMode = 'crf',
+        mobileOptimization = true
+    } = options;
+
+    const fileExt = path.extname(inputPath);
+    const baseName = path.basename(inputPath, fileExt);
+    const outputDir = path.join(outputBasePath, baseName);
+
+    // 软件编码参数（不使用硬件加速）
+    const args = ['-i', inputPath];
+
+    // 软件编码器
+    args.push('-c:v', 'libx264');
+
+    // 质量设置（使用更快的preset以补偿软件编码的性能损失）
+    if (quality === 'custom') {
+        if (customProfile) args.push('-profile:v', customProfile);
+        if (customBitrate) args.push('-b:v', `${customBitrate}k`);
+        if (customFramerate) args.push('-r', customFramerate.toString());
+        if (customPreset) args.push('-preset', customPreset);
+    } else {
+        const qualitySettings = {
+            'high': { crf: 20, preset: 'fast', profile: 'baseline' },    // 比原来快一些
+            'medium': { crf: 25, preset: 'faster', profile: 'baseline' }, // 比原来快一些  
+            'fast': { crf: 28, preset: 'veryfast', profile: 'baseline' }  // 最快设置
+        };
+        
+        const qualitySetting = qualitySettings[quality] || qualitySettings['medium'];
+        
+        if (qualitySetting.profile) args.push('-profile:v', qualitySetting.profile);
+        if (qualitySetting.crf) args.push('-crf', qualitySetting.crf.toString());
+        if (qualitySetting.preset) args.push('-preset', qualitySetting.preset);
+    }
+
+    // H.264优化参数
+    args.push('-level', '3.1', '-g', '50', '-sc_threshold', '0');
+
+    // 色彩参数
+    if (colorEnhancement) {
+        args.push(
+            '-colorspace', 'bt709',
+            '-color_primaries', 'bt709',
+            '-color_trc', 'bt709',
+            '-color_range', 'tv',
+            '-pix_fmt', 'yuv420p'
+        );
+    } else {
+        args.push('-pix_fmt', 'yuv420p');
+    }
+
+    // 音频编码
+    args.push('-c:a', 'aac');
+    if (quality === 'custom') {
+        if (customAudioBitrate) args.push('-b:a', `${customAudioBitrate}k`);
+        if (customAudioSamplerate) args.push('-ar', customAudioSamplerate.toString());
+    } else {
+        args.push('-b:a', mobileOptimization ? '96k' : '128k');
+        args.push('-ar', mobileOptimization ? '44100' : '48000');
+    }
+
+    // 分辨率处理
+    const resolutionMap = {
+        '4k': '3840:2160',
+        '2k': '2560:1440', 
+        '1080p': '1920:1080',
+        '720p': '1280:720',
+        '480p': '854:480'
+    };
+
+    let resolutionParam;
+    if (resolution === 'custom') {
+        resolutionParam = `${customWidth}:${customHeight}`;
+    } else if (resolution !== 'auto') {
+        resolutionParam = resolutionMap[resolution];
+    }
+
+    if (resolutionParam) {
+        if (scalingStrategy === 'smart-pad') {
+            const [targetWidth, targetHeight] = resolutionParam.split(':');
+            args.push('-vf', `scale=${resolutionParam}:force_original_aspect_ratio=decrease,pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2`);
+        } else {
+            args.push('-vf', `scale=${resolutionParam}:force_original_aspect_ratio=decrease`);
+        }
+    }
+
+    // HLS参数
+    args.push(
+        '-hls_time', segmentDuration.toString(),
+        '-hls_list_size', '0',
+        '-hls_segment_type', 'mpegts',
+        '-hls_flags', 'independent_segments',
+        '-hls_segment_filename', path.join(outputDir, `${baseName}_%03d.ts`),
+        '-f', 'hls',
+        path.join(outputDir, `${baseName}.m3u8`)
+    );
+
+    if (logCallback) {
+        logCallback('info', '🔄 使用软件编码回退方案，质量设置已优化以提升速度');
+    }
+
+    return args;
 }
 
 module.exports = { processVideoFiles }; 
