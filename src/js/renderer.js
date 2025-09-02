@@ -42,6 +42,9 @@ class MediaProcessorApp {
         
         // 初始化列宽调整功能
         this.initializeColumnResizer();
+        
+        // 初始化输出目录显示
+        this.updateOutputFolderDisplay();
     }
 
     /**
@@ -148,6 +151,30 @@ class MediaProcessorApp {
         if (container) {
             document.head.appendChild(style);
             container.insertBefore(notice, container.firstChild);
+        }
+    }
+
+    // 更新输出目录显示
+    updateOutputFolderDisplay() {
+        const selectOutputBtn = document.getElementById('select-output-btn');
+        const outputFolder = document.getElementById('output-folder');
+        
+        if (this.currentFileType === 'video') {
+            // 对于视频转m3u8模式，禁用选择按钮并显示说明
+            selectOutputBtn.disabled = true;
+            selectOutputBtn.textContent = '智能输出';
+            selectOutputBtn.title = '视频转m3u8模式使用智能输出，每个视频在其同级目录下创建output/文件名/独立文件夹';
+            outputFolder.value = '🔄 智能输出：每个视频在其同级目录下创建output/文件名/的独立文件夹';
+            outputFolder.style.color = '#666';
+        } else {
+            // 对于其他模式，启用选择按钮
+            selectOutputBtn.disabled = false;
+            selectOutputBtn.textContent = '选择';
+            selectOutputBtn.title = '选择输出文件夹';
+            outputFolder.style.color = '#000';
+            if (outputFolder.value.includes('智能输出')) {
+                outputFolder.value = ''; // 清空智能输出提示
+            }
         }
     }
 
@@ -699,11 +726,18 @@ class MediaProcessorApp {
                 this.folderPath.textContent = `当前文件夹: ${result.path}`;
                 this.addLog('info', `📂 选择文件夹扫描到 ${this.getFileTypeName()} 标签: ${result.path}`);
                 
-                // 设置默认输出路径为源文件夹下的output文件夹
-                const defaultOutputPath = await ipcRenderer.invoke('get-default-output-path', result.path);
-                if (defaultOutputPath.success) {
-                    this.outputFolder.value = defaultOutputPath.path;
-                    this.addLog('info', `📁 默认输出路径: ${defaultOutputPath.path}`);
+                // 根据文件类型设置输出路径
+                if (this.currentFileType === 'video') {
+                    // 对于视频转m3u8模式，显示智能输出提示
+                    this.outputFolder.value = '🔄 智能输出：每个视频在其同级目录下创建output/文件名/的独立文件夹';
+                    this.addLog('info', '📁 智能输出模式：每个视频文件将在其所在目录的同级创建output/文件名/独立目录');
+                } else {
+                    // 对于其他模式，设置默认输出路径为源文件夹下的output文件夹
+                    const defaultOutputPath = await ipcRenderer.invoke('get-default-output-path', result.path);
+                    if (defaultOutputPath.success) {
+                        this.outputFolder.value = defaultOutputPath.path;
+                        this.addLog('info', `📁 默认输出路径: ${defaultOutputPath.path}`);
+                    }
                 }
                 
                 // 重置当前tab的文件列表，然后扫描文件夹
@@ -751,14 +785,19 @@ class MediaProcessorApp {
                 const firstFilePath = files[0];
                 this.currentFolder = path.dirname(firstFilePath);
                 
-                // 对于LOGO水印模式和视频转m3u8模式，每次选择新文件时都更新输出路径
+                // 对于LOGO水印模式，每次选择新文件时都更新输出路径
+                // 对于视频转m3u8模式，显示智能输出信息
                 // 对于其他模式，只在没有设置输出路径时设置默认路径
-                if (this.currentFileType === 'logo-watermark' || this.currentFileType === 'video' || !this.outputFolder.value) {
+                if (this.currentFileType === 'logo-watermark' || !this.outputFolder.value) {
                     const defaultOutputPath = await ipcRenderer.invoke('get-default-output-path', this.currentFolder);
                     if (defaultOutputPath.success) {
                         this.outputFolder.value = defaultOutputPath.path;
                         this.addLog('info', `📁 输出路径已更新: ${defaultOutputPath.path}`);
                     }
+                } else if (this.currentFileType === 'video') {
+                    // 对于视频转m3u8模式，显示智能输出提示
+                    this.outputFolder.value = '🔄 智能输出：每个视频在其同级目录下创建output/文件名/的独立文件夹';
+                    this.addLog('info', '📁 智能输出模式：每个视频文件将在其所在目录的同级创建output/文件名/独立目录');
                 }
                 
                 // LOGO水印功能：清空列表并添加新文件；其他功能：追加到列表
@@ -975,6 +1014,9 @@ class MediaProcessorApp {
 
     switchFileTab(type) {
         this.currentFileType = type;
+        
+        // 更新输出目录显示
+        this.updateOutputFolderDisplay();
         
         // 更新left-panel的data属性，便于CSS样式控制
         const leftPanel = document.querySelector('.left-panel');

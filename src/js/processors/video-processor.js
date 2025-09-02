@@ -182,8 +182,7 @@ function executeFFmpeg(args, logCallback, progressCallback = null, totalDuration
 }
 
 async function processVideoFiles(progressCallback, logCallback, folderPath, outputPath, files, options, shouldStopCallback = null) {
-    const outputDir = outputPath; // 直接使用输出路径，不添加video_output子文件夹
-    await fs.mkdir(outputDir, { recursive: true });
+    // 对于m3u8转换，我们不使用统一的输出目录，而是为每个视频在其同级目录下创建output目录
 
     let processedCount = 0;
     const totalFiles = files.length;
@@ -218,7 +217,16 @@ async function processVideoFiles(progressCallback, logCallback, folderPath, outp
                 });
             } : null;
 
-            await processVideo(file.path, outputDir, options, logCallback, fileProgressCallback);
+            // 为每个视频文件在其所在目录的同级创建output目录，然后在output下创建以文件名命名的子目录
+            const videoDir = path.dirname(file.path);
+            const fileName = path.basename(file.path, path.extname(file.path)); // 获取不带扩展名的文件名
+            const videoOutputDir = path.join(videoDir, 'output', fileName);
+            
+            if (logCallback) {
+                logCallback('info', `📁 输出目录: ${videoOutputDir}`);
+            }
+            
+            await processVideo(file.path, videoOutputDir, options, logCallback, fileProgressCallback);
             results.processed++;
             if (logCallback) {
                 logCallback('success', `✅ ${file.name} 视频处理成功`);
@@ -282,8 +290,8 @@ async function processVideo(inputPath, outputBasePath, options, logCallback, pro
         logCallback('info', `🎞️ 编码: 视频=${videoInfo.videoCodec}, 音频=${videoInfo.audioCodec}`);
     }
 
-    // 为每个视频文件创建独立的输出目录
-    const outputDir = path.join(outputBasePath, baseName);
+    // 使用传入的输出目录，确保目录存在
+    const outputDir = outputBasePath;
     
     try {
         fsSync.mkdirSync(outputDir, { recursive: true });
@@ -695,7 +703,7 @@ async function buildSoftwareEncodingArgs(inputPath, outputBasePath, options, log
 
     const fileExt = path.extname(inputPath);
     const baseName = path.basename(inputPath, fileExt);
-    const outputDir = path.join(outputBasePath, baseName);
+    const outputDir = outputBasePath; // 直接使用传入的输出目录
 
     // 软件编码参数（不使用硬件加速）
     const args = ['-i', inputPath];
