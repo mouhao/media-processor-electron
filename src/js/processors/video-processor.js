@@ -353,6 +353,7 @@ async function processVideo(inputPath, outputBasePath, options, logCallback, pro
                 if (logCallback) {
                     logCallback('info', '🚀 VideoToolbox兼容性检查通过，启用硬件编码');
                     logCallback('info', `📱 系统版本: macOS ${majorVersion >= 23 ? '14+' : majorVersion >= 22 ? '13' : majorVersion >= 21 ? '12' : majorVersion >= 20 ? '11' : '10.13+'}`);
+                    logCallback('info', '💡 VideoToolbox健康提示：如遇失败会自动回退到软件编码');
                 }
             } else {
                 if (logCallback) {
@@ -383,43 +384,41 @@ async function processVideo(inputPath, outputBasePath, options, logCallback, pro
             args.push('-preset', customPreset);
         }
     } else {
-        // === Mac硬件编码器优化的质量设置 ===
+        // === Mac硬件编码器优化的质量设置（稳定兼容版本）===
         if (useMacHardwareAccel) {
-            // VideoToolbox硬件编码器使用不同的参数体系（提升码率保证复杂场景质量）
+            // VideoToolbox硬件编码器：使用保守稳定的参数配置
             const vtQualitySettings = {
-                'high': { bitrate: '12000k', maxrate: '16000k', bufsize: '24000k', profile: 'main' },
-                'medium': { bitrate: '8000k', maxrate: '12000k', bufsize: '16000k', profile: 'main' },
-                'fast': { bitrate: '6000k', maxrate: '8000k', bufsize: '12000k', profile: 'main' }
+                'high': { bitrate: '6000k', maxrate: '8000k', bufsize: '12000k', profile: 'main' },
+                'medium': { bitrate: '4000k', maxrate: '6000k', bufsize: '8000k', profile: 'main' },
+                'fast': { bitrate: '3000k', maxrate: '4000k', bufsize: '6000k', profile: 'baseline' }
             };
             
             const vtSetting = vtQualitySettings[quality] || vtQualitySettings['medium'];
             args.push('-profile:v', vtSetting.profile);
-            args.push('-b:v', vtSetting.bitrate);
-            args.push('-maxrate', vtSetting.maxrate);    // 添加最大码率控制
-            args.push('-bufsize', vtSetting.bufsize);    // 添加缓冲区大小
             
-            // VideoToolbox专用参数：复杂场景优化
+            // VideoToolbox专用参数：稳定优先
             args.push('-allow_sw', '1'); // 允许软件回退
             
-            // 质量稳定性参数 - 针对复杂场景
-            if (options.qualityStability !== false) {
-                if (options.complexSceneMode) {
-                    args.push('-q:v', '35');  // 极高质量因子，最大化还原原视频
-                    args.push('-qmin', '10'); // 最小量化参数，保证细节
-                    args.push('-qmax', '45'); // 最大量化参数，控制质量下限
-                    if (logCallback) {
-                        logCallback('info', '🎯 VideoToolbox复杂场景极致优化：质量因子35，最大化原视频还原');
-                    }
-                } else {
-                    args.push('-q:v', '45');  // 标准高质量因子
-                    if (logCallback) {
-                        logCallback('info', '🎯 VideoToolbox高质量模式：质量因子45，优秀细节保持');
-                    }
+            // 根据质量模式选择控制方式（避免参数冲突）
+            if (options.complexSceneMode) {
+                // 复杂场景：使用码率控制确保稳定
+                args.push('-b:v', vtSetting.bitrate);
+                args.push('-maxrate', vtSetting.maxrate);
+                args.push('-bufsize', vtSetting.bufsize);
+                if (logCallback) {
+                    logCallback('info', `🎯 VideoToolbox复杂场景稳定模式：码率${vtSetting.bitrate}，确保兼容性`);
+                }
+            } else {
+                // 标准场景：使用质量因子（更好的质量控制）
+                const qScale = quality === 'high' ? 20 : quality === 'medium' ? 25 : 30;
+                args.push('-q:v', qScale.toString());
+                if (logCallback) {
+                    logCallback('info', `🎯 VideoToolbox标准质量模式：质量因子${qScale}，优化细节`);
                 }
             }
             
             if (logCallback) {
-                logCallback('info', `⚡ VideoToolbox高质量模式: ${vtSetting.bitrate} (最大${vtSetting.maxrate}), profile: ${vtSetting.profile}`);
+                logCallback('info', `⚡ VideoToolbox稳定模式: profile=${vtSetting.profile}, 兼容性优先`);
             }
         } else {
             // 软件编码器的传统质量设置（极致复杂场景优化）
@@ -658,14 +657,25 @@ async function processVideo(inputPath, outputBasePath, options, logCallback, pro
     try {
         await executeFFmpeg(args, logCallback, progressCallback, videoInfo.duration);
     } catch (error) {
-        // Mac硬件编码失败时，自动回退到软件编码
+        // Mac硬件编码失败时，自动回退到软件编码（增强错误诊断）
         if (useMacHardwareAccel && (error.message.includes('h264_videotoolbox') || 
                                    error.message.includes('VideoToolbox') ||
                                    error.message.includes('Device does not support') ||
-                                   error.message.includes('Cannot load'))) {
+                                   error.message.includes('Cannot load') ||
+                                   error.message.includes('退出码: 187') ||
+                                   error.message.includes('exit code 187'))) {
             if (logCallback) {
                 logCallback('warning', '⚠️ VideoToolbox硬件编码失败，自动回退到软件编码');
-                logCallback('info', `📋 失败原因: ${error.message.substring(0, 100)}...`);
+                logCallback('info', `📋 失败原因: ${error.message.substring(0, 150)}...`);
+                
+                // 诊断信息
+                if (error.message.includes('187')) {
+                    logCallback('info', '🔍 错误码187分析：硬件编码器初始化失败，可能原因：');
+                    logCallback('info', '   • 系统资源不足或VideoToolbox服务繁忙');
+                    logCallback('info', '   • 编码参数组合不兼容');
+                    logCallback('info', '   • 其他应用占用硬件编码资源');
+                }
+                
                 logCallback('info', '🔄 正在使用优化的软件编码参数重新处理...');
             }
             
