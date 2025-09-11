@@ -197,6 +197,9 @@ fi
 FILEDIR=$(dirname $INPUT_FILE)
 FILENAME=$(basename $INPUT_FILE)
 FILENAME_WITHOUT_EXT="${FILENAME%.*}"
+# 添加时间戳到文件名以解决浏览器缓存问题
+TIMESTAMP=$(date +"%Y%m%d%H%M")
+FILENAME_WITHOUT_EXT_WITH_TIMESTAMP="${FILENAME_WITHOUT_EXT}_${TIMESTAMP}"
 
 # 获取视频的相关信息
 log "Start..."
@@ -348,7 +351,7 @@ fi
 # 如果需要转为m3u8
 if [ "$CONVERT_TO_M3U8" = "yes" ]; then
     log "Converting video to m3u8 format..."
-    CMD=($FFMPEG_PATH $FFMPEG_LOGLEVEL -i $INTERMEDIATE_FILE -c:v libx264 -profile:v main -hls_time 15 -hls_list_size 0  -c:a aac -strict -2 -f hls -maxrate 3M -bufsize 6M  -y $OUTPUT_PATH/$FILENAME_WITHOUT_EXT.m3u8)
+    CMD=($FFMPEG_PATH $FFMPEG_LOGLEVEL -i $INTERMEDIATE_FILE -c:v libx264 -profile:v main -hls_time 15 -hls_list_size 0  -c:a aac -strict -2 -f hls -maxrate 3M -bufsize 6M  -y $OUTPUT_PATH/$FILENAME_WITHOUT_EXT_WITH_TIMESTAMP.m3u8)
     log "Executing: ${CMD[*]}"
     eval "$CMD"
     check_cmd_success "Failed to convert to m3u8"

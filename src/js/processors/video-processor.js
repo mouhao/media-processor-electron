@@ -280,7 +280,11 @@ async function processVideo(inputPath, outputBasePath, options, logCallback, pro
         } = options;
 
         const fileExt = path.extname(inputPath);
-        const baseName = path.basename(inputPath, fileExt);
+        const baseNameOriginal = path.basename(inputPath, fileExt);
+        // 添加时间戳到文件名以解决浏览器缓存问题
+        const now = new Date();
+        const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+        const baseName = `${baseNameOriginal}_${timestamp}`;
 
     // 先分析视频获取时长信息
     const videoInfo = await analyzeVideo(inputPath, logCallback);
@@ -623,8 +627,7 @@ async function processVideo(inputPath, outputBasePath, options, logCallback, pro
         '-hls_segment_type', 'mpegts',           // MPEG-TS格式
         '-hls_flags', 'independent_segments+temp_file', // 独立片段+临时文件避免不完整片段
         '-hls_playlist_type', 'vod',             // VOD类型，优化播放器行为
-        '-hls_start_number_source', 'datetime',  // 避免片段序号冲突
-        '-hls_segment_filename', path.join(outputDir, `${baseName}_%03d.ts`),
+        '-hls_segment_filename', path.join(outputDir, `${baseName}%03d.ts`),
         '-f', 'hls',
         path.join(outputDir, `${baseName}.m3u8`)
     );
@@ -712,7 +715,11 @@ async function buildSoftwareEncodingArgs(inputPath, outputBasePath, options, log
     } = options;
 
     const fileExt = path.extname(inputPath);
-    const baseName = path.basename(inputPath, fileExt);
+    const baseNameOriginal = path.basename(inputPath, fileExt);
+    // 添加时间戳到文件名以解决浏览器缓存问题
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+    const baseName = `${baseNameOriginal}_${timestamp}`;
     const outputDir = outputBasePath; // 直接使用传入的输出目录
 
     // 软件编码参数（不使用硬件加速）
@@ -841,8 +848,7 @@ async function buildSoftwareEncodingArgs(inputPath, outputBasePath, options, log
         '-hls_segment_type', 'mpegts',
         '-hls_flags', 'independent_segments+temp_file',
         '-hls_playlist_type', 'vod',
-        '-hls_start_number_source', 'datetime',
-        '-hls_segment_filename', path.join(outputDir, `${baseName}_%03d.ts`),
+        '-hls_segment_filename', path.join(outputDir, `${baseName}%03d.ts`),
         '-movflags', '+faststart',               // 软件编码回退时的快速启动
         '-f', 'hls',
         path.join(outputDir, `${baseName}.m3u8`)
